@@ -79,6 +79,9 @@ fn spawn_waves(
     enemies: Query<(), With<Enemy>>,
 ) {
     let Ok(hero) = hero.single() else { return };
+    if std::env::var_os("TQ2_BENCH").is_some() {
+        return;
+    }
     let t = run.time;
     // Pressure ramps up over the run: faster spawning, more per wave, tougher enemies.
     let interval = (1.6 - t / 200.0).max(0.25);
@@ -117,6 +120,11 @@ fn ring_point(ground: &Ground, center: Vec2) -> Option<Vec2> {
         let p = center + Vec2::from_angle(angle) * dist;
         (b.contains(p) && ground.is_land(p)).then_some(p)
     })
+}
+
+/// A regular Boarman with the given HP (used by the benchmark).
+pub fn spawn_boarman_at(commands: &mut Commands, at: Vec2, hp: f32) {
+    spawn_boarman(commands, at, hp, config::ENEMY_DAMAGE, 1.0, 1, 1.0, false);
 }
 
 #[allow(clippy::too_many_arguments)]

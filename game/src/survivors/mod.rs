@@ -1,6 +1,7 @@
 //! The Survivors game loop. Simulation state lives in plain components on the ground
 //! plane (`Pos`, `Vel`, `Health`…) and runs in `FixedUpdate`; visuals only follow it.
 //! Keeping the simulation separate is what later lets a host run it for two players.
+mod bench;
 mod camera;
 mod combat;
 mod enemies;
@@ -108,7 +109,7 @@ impl Plugin for SurvivorsPlugin {
     fn build(&self, app: &mut App) {
         app.init_state::<GameState>()
             .init_resource::<Run>()
-            .add_plugins((camera::plugin, player::plugin, enemies::plugin, combat::plugin, progression::plugin, hud::plugin))
+            .add_plugins((camera::plugin, player::plugin, enemies::plugin, combat::plugin, progression::plugin, hud::plugin, bench::plugin))
             .add_systems(Startup, start_run)
             .add_systems(Update, (follow_ground, restart).chain());
     }

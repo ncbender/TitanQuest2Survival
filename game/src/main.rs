@@ -4,6 +4,7 @@
 //! keys: WASD move, Q/E rotate camera, mouse wheel / R-F zoom, 1-3 pick upgrade, R restart
 //! env TQ2_SCREENSHOT=<path>: save a screenshot after TQ2_SCREENSHOT_DELAY s (default 4) and exit
 //! env TQ2_AUTOPLAY=1: the hero runs in circles by itself (automated tests, benchmarks)
+//! env TQ2_BENCH=<n>: spawn n enemies, measure 10 s of frame times into cache/bench.txt, exit
 mod character;
 mod ground;
 mod survivors;
