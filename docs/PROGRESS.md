@@ -44,11 +44,13 @@ the extra skeletons of mane/arm-hair parts were the main cost.
 1. Performance beyond 500: animation LOD / reduced update rate for distant enemies.
 2. ~~More enemy types~~ Spider, Giant Boar, Skeleton (rises from the ground), Harpy, Cyclops boss
    added via `tools/assets.json` + `bestiary.rs`; still no real death animation.
-3. ~~Weapon on the hero~~ done; cast animation still open; TQ2 flipbook VFX for fireballs/Nova done.
+3. ~~Weapon on the hero~~, ~~attack animations~~ done; the hero still faces where it runs, not
+   where it attacks. TQ2 flipbook VFX for fireballs/Nova/Meteor done.
 4. ~~Terrain layer blending~~ done (11 original ground layers); larger land arena (Greece world
    partition, FastGeo) still open.
 5. Satyr assembly (static-mesh parts on the humanoid rig).
-6. ~~Main menu~~ + character creation done; settings/save, then two-player co-op.
+6. ~~Main menu, character creation, save~~ done; settings, more items (rarity/stats), then
+   two-player co-op.
 
 ## Gear (first version, 2026-10-21)
 
@@ -57,12 +59,12 @@ the extra skeletons of mane/arm-hair parts were the main cost.
   armour sets (Adventurer, Scholar, Ranger) swap the visible torso/legs/shoulders and absorb
   damage. Elites and bosses drop a TQ2 chest; walking into it offers three pieces of gear.
 - Verified: screenshots of bow+ranger and sword+scholar; chest -> sword swap in a test run.
-- Not yet: attack animations while firing/swinging, more weapon/armour sets, item rarity/stats.
+- Superseded by "Weapon slots, attack animations, meta progression" below.
 
 ## Character creation, fireballs, English UI (2026-10-21)
 
-- Main menu → "New Hero" → character creation: pick the starting weapon (1–3 or click);
-  every run (including restarts) starts with it (`StartingWeapon` in `equipment.rs`).
+- Main menu → "New Hero" → character creation: pick the starting weapon (now part of the
+  profile, see below).
 - Staff fires fireballs: TQ2 flipbook `t_explosion_01_05x05_c` (frames 0–4 looping) with an
   orange point light; explodes on impact (frames 0–11, the fiery part before the smoke).
   `vfx.rs` holds the camera-facing flipbook sprites. Fire Nova spawns a ring of 10 explosions.
@@ -72,13 +74,24 @@ the extra skeletons of mane/arm-hair parts were the main cost.
   enemy names).
 - Test hook `TQ2_MENU=hero` opens the character creation page (for screenshots).
 
-## Planned features (requested by the user)
+## Weapon slots, attack animations, meta progression (2026-10-21)
 
-- **Visible gear:** equipment found or chosen during a run is shown on the hero (armour parts,
-  weapon). The staff on `HandAttach_R` (2026-10-21) is the first test of this.
-- **Weapon-driven auto-attacks:** the equipped weapon type decides the hero's auto-attack
-  (e.g. staff = bolts, bow = arrows, sword = melee sweep); changing the weapon changes both the
-  mesh in the hand and the attack. Build on `Attachment` + a weapon table like `bestiary.rs`.
+- Slots (user's rules, D7): two-handed weapon alone, or one-handed weapon + second one-handed
+  weapon / shield / talisman. Items: Staff of Apollo, Arch of Iris, Sickle of Kronos (2H axe),
+  Battlemage Sword, Sword of Peleus (1H), Shield of Heracles (20 % block), Arcane Mirror
+  (talisman, +40 % skill damage), three armour sets. Dual wielding attacks 30 % faster.
+- TQ2 stance sets per combination (staff2h, bow, axe2h, sword, sword+shield, sword+sword,
+  sword+talisman): idle, run and three attack clips each (35 clips baked into the hero).
+- Attacks play TQ2's attack clips on the upper body only (`UpperBodyAction`, mask from
+  `Spine1_M`), legs keep running. Verified by screenshots: sword+shield and axe swings while
+  running, dual wield, talisman. Left-hand weapons need the opposite blade flip.
+- Meta progression (D6): chest items go to the stash at the end of the run; the armoury (main
+  menu) equips them; favour buys skill-tree nodes (Warfare, Defence, Fire, Fortune). Fire Nova
+  and the new Meteor skill must be unlocked in the tree before level-ups offer them.
+- Verified: unit tests (slot rules, dual wield needs two copies, loadout round trip, favour,
+  skill purchase/refund); a 45 s autoplay run with `TQ2_TEST_END` banked the chest item and
+  1 favour into the profile file; screenshots of title, armoury, skill tree, end screen.
+- Performance: 500 enemies 76–86 FPS (two runs) after limiting the masked graph to the hero.
 
 ## Blockers / risks
 

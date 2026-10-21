@@ -5,7 +5,11 @@
 //! Once spawned, every part is re-skinned onto the body's joints and its duplicate joints are
 //! removed, so a character animates one skeleton (plus the few bones only a part has, e.g. a
 //! mane). Without this, extra parts tripled the animation cost per enemy.
-use bevy::gltf::Gltf;
+//!
+//! `UpperBodyAction` plays a one-shot clip (an attack) on the upper body only, from `Spine1_M`
+//! up, over the base clip, so the legs keep running while the arms swing.
+use bevy::animation::{AnimationTargetId, RepeatAnimation};
+use bevy::gltf::{Gltf, GltfNode};
 use bevy::mesh::skinning::SkinnedMesh;
 use bevy::prelude::*;
 use std::collections::{HashMap, HashSet};
@@ -17,7 +21,17 @@ impl Plugin for CharacterPlugin {
         app.init_resource::<PartLibrary>()
             .add_systems(
                 Update,
-                (sync_parts, instantiate_parts, merge_parts, bind_players, drive_animation, attach_to_bones).chain(),
+                (
+                    sync_parts,
+                    instantiate_parts,
+                    merge_parts,
+                    bind_players,
+                    drive_animation,
+                    drive_upper_body,
+                    reattach,
+                    attach_to_bones,
+                )
+                    .chain(),
             );
     }
 }
@@ -39,15 +53,47 @@ impl CharacterAnim {
     }
 }
 
+/// A one-shot clip on the upper body over the base clip (e.g. an attack while running).
+/// Inserting it again restarts it. The clip is sped up to fit into `max_duration` seconds.
+#[derive(Component, Clone)]
+pub struct UpperBodyAction {
+    pub clip: &'static str,
+    pub max_duration: f32,
+}
+
+/// Marks a character whose parts get upper-body animation nodes (the hero). Others skip
+/// them: the masks cost a third of the frame rate with 500 animated enemies.
+#[derive(Component)]
+pub struct UpperBodyRig;
+
+/// Bones from here down the hierarchy belong to the upper body.
+const UPPER_BODY_ROOT: &str = "Spine1_M";
+/// Mask group of all other (lower-body) bones; upper-body nodes mask it out.
+const LOWER_BODY_GROUP: u32 = 0;
+/// Weight of an upper-body action against the base clip at full strength (blending is
+/// normalised, so 20:1 leaves ~5 % of the base clip in the arms).
+const UPPER_BODY_WEIGHT: f32 = 20.0;
+const FADE_IN: f32 = 0.08;
+const FADE_OUT: f32 = 0.15;
+
 /// A static mesh (weapon, prop) carried on one of the character's bones, e.g. a staff on
 /// `HandAttach_R`. TQ2 weapon meshes are modelled around their grip, so only a rotation
 /// relative to the bone is needed.
-#[derive(Component)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct Attachment {
     pub bone: &'static str,
     pub scene: &'static str,
     pub rotation: Quat,
 }
+
+/// Everything a character carries on its bones (main hand, off hand). Changing it replaces
+/// all attached meshes.
+#[derive(Component, Clone, PartialEq)]
+pub struct Attachments(pub Vec<Attachment>);
+
+/// The current `Attachments` are spawned on the bones.
+#[derive(Component)]
+struct AttachmentsDone;
 
 /// The full list of parts a character should wear (body first). Changing it swaps parts:
 /// parts no longer listed are removed, new ones are attached (e.g. a different armour set).
@@ -85,7 +131,16 @@ struct PlayerOf {
 
 struct PartAssets {
     gltf: Handle<Gltf>,
-    graph: Option<(Handle<AnimationGraph>, HashMap<String, AnimationNodeIndex>)>,
+    graph: Option<PartGraph>,
+}
+
+/// Every clip of a part twice: full body (`base`) and upper body only (`upper`).
+struct PartGraph {
+    handle: Handle<AnimationGraph>,
+    base: HashMap<String, AnimationNodeIndex>,
+    upper: HashMap<String, AnimationNodeIndex>,
+    /// Clip length of every upper-body node.
+    durations: HashMap<AnimationNodeIndex, f32>,
 }
 
 /// One glTF + one animation graph per part file, shared by every character using it.
@@ -140,8 +195,11 @@ fn instantiate_parts(
     assets: Res<AssetServer>,
     mut library: ResMut<PartLibrary>,
     gltfs: Res<Assets<Gltf>>,
+    gltf_nodes: Res<Assets<GltfNode>>,
+    clips: Res<Assets<AnimationClip>>,
     mut graphs: ResMut<Assets<AnimationGraph>>,
     pending: Query<(Entity, &PendingPart, &ChildOf)>,
+    rigs: Query<(), With<UpperBodyRig>>,
 ) {
     for (entity, part, parent) in &pending {
         let entry = library
@@ -151,18 +209,51 @@ fn instantiate_parts(
         let Some(gltf) = gltfs.get(&entry.gltf) else { continue };
         if entry.graph.is_none() {
             let mut graph = AnimationGraph::new();
-            let nodes = gltf
-                .named_animations
-                .iter()
-                .map(|(name, clip)| (name.to_string(), graph.add_clip(clip.clone(), 1.0, graph.root)))
-                .collect();
-            entry.graph = Some((graphs.add(graph), nodes));
+            let (mut base, mut upper, mut durations) = (HashMap::new(), HashMap::new(), HashMap::new());
+            // Graphs are shared per part file; a file is either worn by rigged characters or not.
+            let rigged = rigs.contains(parent.parent());
+            for (name, clip) in &gltf.named_animations {
+                base.insert(name.to_string(), graph.add_clip(clip.clone(), 1.0, graph.root));
+                if rigged {
+                    let node = graph.add_clip_with_mask(clip.clone(), 1 << LOWER_BODY_GROUP, 1.0, graph.root);
+                    upper.insert(name.to_string(), node);
+                    durations.insert(node, clips.get(clip).map_or(1.0, |c| c.duration()));
+                }
+            }
+            if rigged {
+                for target in lower_body_targets(gltf, &gltf_nodes) {
+                    graph.add_target_to_mask_group(target, LOWER_BODY_GROUP);
+                }
+            }
+            entry.graph = Some(PartGraph { handle: graphs.add(graph), base, upper, durations });
         }
         commands
             .entity(entity)
             .remove::<PendingPart>()
             .insert((WorldAssetRoot(gltf.scenes[0].clone()), CharacterPart { root: parent.parent(), path: part.0.clone(), index: part.1 }));
     }
+}
+
+/// Animation targets of every bone outside the upper body, with ids computed like Bevy's glTF
+/// loader does (names on the path from the scene root to the node).
+fn lower_body_targets(gltf: &Gltf, nodes: &Assets<GltfNode>) -> Vec<AnimationTargetId> {
+    let all: Vec<&GltfNode> = gltf.nodes.iter().filter_map(|h| nodes.get(h)).collect();
+    let children: HashSet<usize> =
+        all.iter().flat_map(|n| n.children.iter().filter_map(|c| nodes.get(c)).map(|c| c.index)).collect();
+    let mut out = vec![];
+    let mut stack: Vec<(&GltfNode, Vec<Name>, bool)> =
+        all.iter().filter(|n| !children.contains(&n.index)).map(|n| (*n, vec![], false)).collect();
+    while let Some((node, mut path, upper)) = stack.pop() {
+        path.push(Name::new(node.name.clone()));
+        let upper = upper || node.name == UPPER_BODY_ROOT;
+        if !upper {
+            out.push(AnimationTargetId::from_names(path.iter()));
+        }
+        for child in node.children.iter().filter_map(|c| nodes.get(c)) {
+            stack.push((child, path.clone(), upper));
+        }
+    }
+    out
 }
 
 /// Re-skins each non-body part onto the body's joints (matched by bone name), moves the
@@ -227,10 +318,10 @@ fn bind_players(
 ) {
     for player in &new_players {
         let Some(part) = parents.iter_ancestors(player).find_map(|e| parts.get(e).ok()) else { continue };
-        let Some((graph, _)) = library.0.get(&part.path).and_then(|p| p.graph.as_ref()) else { continue };
+        let Some(graph) = library.0.get(&part.path).and_then(|p| p.graph.as_ref()) else { continue };
         commands
             .entity(player)
-            .insert((AnimationGraphHandle(graph.clone()), PlayerOf { root: part.root, path: part.path.clone() }));
+            .insert((AnimationGraphHandle(graph.handle.clone()), PlayerOf { root: part.root, path: part.path.clone() }));
         // Re-apply the current clip so a late part starts in sync with the others.
         if let Ok(mut anim) = anims.get_mut(part.root) {
             anim.set_changed();
@@ -249,9 +340,14 @@ fn drive_animation(
     let wanted: HashMap<Entity, &CharacterAnim> = changed.iter().collect();
     for (of, mut player) in &mut players {
         let Some(anim) = wanted.get(&of.root) else { continue };
-        let Some((_, nodes)) = library.0.get(&of.path).and_then(|p| p.graph.as_ref()) else { continue };
-        let Some(&node) = nodes.get(anim.clip) else { continue };
-        player.stop_all();
+        let Some(graph) = library.0.get(&of.path).and_then(|p| p.graph.as_ref()) else { continue };
+        let Some(&node) = graph.base.get(anim.clip) else { continue };
+        // Stop the previous base clip but leave a running upper-body action alone.
+        let old: Vec<AnimationNodeIndex> =
+            player.playing_animations().map(|(n, _)| *n).filter(|n| !graph.durations.contains_key(n)).collect();
+        for n in old {
+            player.stop(n);
+        }
         let active = player.play(node);
         active.set_speed(anim.speed);
         if anim.repeat {
@@ -260,33 +356,78 @@ fn drive_animation(
     }
 }
 
+/// Starts upper-body actions and fades them in and out over the base clip.
+fn drive_upper_body(
+    library: Res<PartLibrary>,
+    started: Query<(Entity, &UpperBodyAction), Changed<UpperBodyAction>>,
+    mut players: Query<(&PlayerOf, &mut AnimationPlayer)>,
+) {
+    let started: HashMap<Entity, &UpperBodyAction> = started.iter().collect();
+    for (of, mut player) in &mut players {
+        let Some(graph) = library.0.get(&of.path).and_then(|p| p.graph.as_ref()) else { continue };
+        if let Some(&node) = started.get(&of.root).and_then(|a| graph.upper.get(a.clip)) {
+            let running: Vec<AnimationNodeIndex> =
+                player.playing_animations().map(|(n, _)| *n).filter(|n| graph.durations.contains_key(n)).collect();
+            for n in running {
+                player.stop(n);
+            }
+            let speed = (graph.durations[&node] / started[&of.root].max_duration).max(1.0);
+            let active = player.play(node);
+            active.replay();
+            active.set_repeat(RepeatAnimation::Never).set_speed(speed).set_weight(0.0);
+        }
+        let mut finished = vec![];
+        for (node, active) in player.playing_animations_mut() {
+            let Some(&duration) = graph.durations.get(node) else { continue };
+            let t = active.seek_time();
+            if active.is_finished() || t >= duration {
+                finished.push(*node);
+                continue;
+            }
+            let envelope = (t / FADE_IN).min(1.0) * ((duration - t) / FADE_OUT).clamp(0.0, 1.0);
+            active.set_weight(UPPER_BODY_WEIGHT * envelope);
+        }
+        for node in finished {
+            player.stop(node);
+        }
+    }
+}
+
+/// New `Attachments` have to be spawned again.
+fn reattach(mut commands: Commands, changed: Query<Entity, Changed<Attachments>>) {
+    for e in &changed {
+        commands.entity(e).remove::<AttachmentsDone>();
+    }
+}
+
 fn attach_to_bones(
     mut commands: Commands,
     assets: Res<AssetServer>,
-    pending: Query<(Entity, &Attachment, &Children)>,
+    pending: Query<(Entity, &Attachments, &Children), Without<AttachmentsDone>>,
     parts: Query<&CharacterPart>,
     children: Query<&Children>,
     names: Query<&Name>,
     attached: Query<(Entity, &AttachedMesh)>,
 ) {
-    for (root, attachment, root_children) in &pending {
+    for (root, attachments, root_children) in &pending {
         // Only the body keeps its bones after merging, so look there.
         let Some(body) = root_children.iter().find(|c| parts.get(*c).is_ok_and(|p| p.index == 0)) else { continue };
-        let Some(bone) = children.iter_descendants(body).find(|e| names.get(*e).is_ok_and(|n| n.as_str() == attachment.bone)) else {
-            continue;
-        };
+        let bone = |name: &str| children.iter_descendants(body).find(|e| names.get(*e).is_ok_and(|n| n.as_str() == name));
+        let Some(bones) = attachments.0.iter().map(|a| bone(a.bone)).collect::<Option<Vec<Entity>>>() else { continue };
         // Replace whatever this character carried before.
         for (old, _) in attached.iter().filter(|(_, a)| a.root == root) {
             commands.entity(old).despawn();
         }
-        let mesh = commands
-            .spawn((
-                WorldAssetRoot(assets.load(GltfAssetLabel::Scene(0).from_asset(attachment.scene))),
-                Transform::from_rotation(attachment.rotation),
-                AttachedMesh { root },
-            ))
-            .id();
-        commands.entity(bone).add_child(mesh);
-        commands.entity(root).remove::<Attachment>();
+        for (attachment, bone) in attachments.0.iter().zip(bones) {
+            let mesh = commands
+                .spawn((
+                    WorldAssetRoot(assets.load(GltfAssetLabel::Scene(0).from_asset(attachment.scene))),
+                    Transform::from_rotation(attachment.rotation),
+                    AttachedMesh { root },
+                ))
+                .id();
+            commands.entity(bone).add_child(mesh);
+        }
+        commands.entity(root).insert(AttachmentsDone);
     }
 }

@@ -22,10 +22,11 @@ pub enum Upgrade {
     Vitality,
     Magnet,
     Nova,
+    Meteor,
 }
 
 impl Upgrade {
-    pub const ALL: [Upgrade; 10] = [
+    pub const ALL: [Upgrade; 11] = [
         Upgrade::Damage,
         Upgrade::AttackSpeed,
         Upgrade::Multishot,
@@ -36,6 +37,7 @@ impl Upgrade {
         Upgrade::Vitality,
         Upgrade::Magnet,
         Upgrade::Nova,
+        Upgrade::Meteor,
     ];
 
     /// Lower-case variant name, e.g. "multishot" (used by test hooks).
@@ -56,6 +58,8 @@ impl Upgrade {
             Upgrade::Magnet => "Attraction: +50 % pickup radius".into(),
             Upgrade::Nova if stats.nova_level == 0 => "New skill – Fire Nova: a ring of flames around you".into(),
             Upgrade::Nova => format!("Fire Nova level {}: more damage, radius and speed", stats.nova_level + 1),
+            Upgrade::Meteor if stats.meteor_level == 0 => "New skill – Meteor: fire falls on nearby enemies".into(),
+            Upgrade::Meteor => format!("Meteor level {}: more meteors and damage", stats.meteor_level + 1),
         }
     }
 
@@ -65,7 +69,8 @@ impl Upgrade {
             Upgrade::Pierce => stats.pierce < 5,
             Upgrade::Crit => stats.crit < 0.5,
             Upgrade::AttackSpeed => stats.cooldown > 0.3,
-            Upgrade::Nova => stats.nova_level < 6,
+            Upgrade::Nova => stats.nova_unlocked && stats.nova_level < 6,
+            Upgrade::Meteor => stats.meteor_unlocked && stats.meteor_level < 6,
             _ => true,
         }
     }
@@ -85,6 +90,7 @@ impl Upgrade {
             }
             Upgrade::Magnet => stats.pickup *= 1.5,
             Upgrade::Nova => stats.nova_level += 1,
+            Upgrade::Meteor => stats.meteor_level += 1,
         }
     }
 }
@@ -126,7 +132,7 @@ fn collect_shards(
         let dist = d.length();
         if dist < 0.6 {
             commands.entity(e).despawn();
-            run.xp += shard.0;
+            run.xp += (shard.0 as f32 * stats.xp).round() as u32;
             audio.play(super::content::sound::SHARD, None, 0.35, 0.06);
         } else if dist < radius {
             // Magnet: shards fly to the hero, faster the closer they get.
@@ -146,10 +152,16 @@ fn collect_shards(
 pub fn make_offer(mut offer: ResMut<Offer>, stats: Res<HeroStats>, run: Res<Run>) {
     let mut pool: Vec<Upgrade> = Upgrade::ALL.into_iter().filter(|u| u.available(&stats)).collect();
     fastrand::shuffle(&mut pool);
-    // The first level-up always offers the second ability so every run can find it.
-    if run.level == 2 && stats.nova_level == 0 {
-        pool.retain(|u| *u != Upgrade::Nova);
-        pool.insert(0, Upgrade::Nova);
+    // The first level-ups always offer the unlocked skills so every run can find them.
+    for (level, skill) in [(2, Upgrade::Nova), (3, Upgrade::Meteor)] {
+        let not_taken = match skill {
+            Upgrade::Nova => stats.nova_level == 0,
+            _ => stats.meteor_level == 0,
+        };
+        if run.level == level && not_taken && skill.available(&stats) {
+            pool.retain(|u| *u != skill);
+            pool.insert(0, skill);
+        }
     }
     offer.0 = pool.into_iter().take(3).collect();
     info!("level {} offer: {:?}", run.level, offer.0);

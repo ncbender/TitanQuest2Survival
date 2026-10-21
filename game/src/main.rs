@@ -7,9 +7,12 @@
 //! env TQ2_AUTOPLAY=1: the hero runs in circles by itself and picks upgrades (tests, benchmarks)
 //! env TQ2_AUTOPICK=1: level-ups pick the first offer (hero stays under manual/no control)
 //! env TQ2_TEST_UPGRADES=multishot,nova,…: apply upgrades at the start of a run
-//! env TQ2_TEST_GEAR=bow,ranger / TQ2_TEST_CHEST=1: start with gear / a chest next to the hero
+//! env TQ2_TEST_GEAR=sword,shield,ranger / TQ2_TEST_CHEST=1: start with gear / a chest next to the hero
 //! env TQ2_TEST_GALLERY=1: spawn one of every enemy type next to the hero
-//! env TQ2_MENU=1 / TQ2_MENU=hero: keep the main menu / open character creation (screenshots)
+//! env TQ2_TEST_END=<s>: end the run after s seconds (end screen, loot banking)
+//! env TQ2_MENU=1|hero|armory|skills: keep the main menu / open that page (screenshots)
+//! env TQ2_ZOOM=<m> / TQ2_PITCH=<rad>: camera distance and angle (close-ups)
+//! env TQ2_PROFILE=<path>: profile file (default save/profile.json; test runs use save/test_profile.json)
 //! env TQ2_BENCH=<n>: spawn n enemies, measure 10 s of frame times into cache/bench.txt, exit
 mod audio;
 mod character;

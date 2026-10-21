@@ -27,3 +27,19 @@ TQ2 ships `fmod.dll`/`fmodstudio.dll` (FMOD 2.02.22) and unencrypted `.bank` fil
 `libloading`) and plays the original events by path, so nothing is extracted or shipped and
 TQ2's own variations/mixing are kept. Without the DLLs the game runs silently.
 `tq2_survivors --list-sounds` prints every event path.
+
+## D6 – Meta progression: gear between runs, skill tree, local save (2026-10-21, user's design)
+The user asked that gear found in a run can only be equipped outside the run, alongside a skill
+tree that unlocks passives and new skills. Chests offer three items; the picked one goes into
+the run's loot and is added to the stash when the run ends (death, victory or leaving via the
+pause menu; nothing is lost). Favour = levels gained + full minutes + 5 for surviving. The
+profile is JSON in `save/profile.json` inside the project folder (git-ignored, nothing outside
+the project is written); automated test runs use `save/test_profile.json`. Unreadable profiles
+are kept as `*.bad` instead of being overwritten.
+
+## D7 – Weapon slots and attack animations (2026-10-21, user's rules)
+Two-handed weapon alone, or a one-handed weapon plus a second one-handed weapon, a shield or a
+talisman. The combination picks TQ2's own stance set (`sword+shield`, `sword+sword`,
+`sword+talisman`, `staff2h`, `bow`, `axe2h`). Attack clips play on the upper body only (an
+animation mask from `Spine1_M` up), so the legs keep running. Only the hero gets the masked
+graph (`UpperBodyRig`): giving it to all characters dropped 500 enemies from 79 to 53 FPS.

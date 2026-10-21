@@ -11,7 +11,9 @@ mod flowfield;
 mod hud;
 mod menu;
 mod player;
+mod profile;
 mod progression;
+mod skills;
 
 use bevy::prelude::*;
 
@@ -34,6 +36,7 @@ pub mod content {
         pub const RUN_MUSIC: &str = "event:/music/mus_combat_generic_01";
         pub const BOSS_MUSIC: &str = "event:/music/mus_centaur_chapter_bossfight_centaurus";
         pub const NOVA: &str = "event:/abilities/player/masteries/spirit/death_nova/sfx_ability_player_death_nova_commit";
+        pub const METEOR: &str = "event:/abilities/enemies/boarmen/sfx_ability_enemies_bo_firemancer_meteor_small_impact";
         pub const KILL: &str = "event:/weapons/hit/sfx_weapon_hit_generic_medium";
         pub const SHARD: &str = "event:/loot/pickup/misc/sfx_loot_pickup_gold";
         pub const LEVEL_UP: &str = "event:/ui/menu/mastery_screen/sfx_ui_menu_mastery_screen_ability_level_up_release";
@@ -110,6 +113,8 @@ pub struct Run {
     pub xp: u32,
     pub xp_next: u32,
     pub won: bool,
+    /// Loot and favour of this run were credited to the profile.
+    pub banked: bool,
 }
 
 /// Where the arena is and where the hero starts.
@@ -126,18 +131,21 @@ impl Plugin for SurvivorsPlugin {
             .init_resource::<Run>()
             .add_message::<StartRun>()
             .add_plugins((camera::plugin, player::plugin, enemies::plugin, combat::plugin, progression::plugin, hud::plugin))
-            .add_plugins((menu::plugin, bench::plugin, flowfield::plugin, equipment::plugin))
+            .add_plugins((menu::plugin, bench::plugin, flowfield::plugin, equipment::plugin, profile::plugin))
             .add_systems(Startup, skip_menu_in_tests)
             .add_systems(OnEnter(GameState::MainMenu), clear_run)
             .add_systems(Update, ((start_run, follow_ground, restart).chain(), music));
     }
 }
 
-/// Automated tests (screenshots, autoplay, benchmarks) start a run without the menu.
+/// Screenshots, autoplay or benchmarks are running (they use a separate test profile).
+pub fn is_test_run() -> bool {
+    ["TQ2_SCREENSHOT", "TQ2_AUTOPLAY", "TQ2_BENCH", "TQ2_TEST_GALLERY"].iter().any(|v| std::env::var_os(v).is_some())
+}
+
+/// Automated tests start a run without the menu (TQ2_MENU keeps the menu for screenshots).
 fn skip_menu_in_tests(mut start: MessageWriter<StartRun>) {
-    let tests = ["TQ2_SCREENSHOT", "TQ2_AUTOPLAY", "TQ2_BENCH", "TQ2_TEST_GALLERY"];
-    // TQ2_MENU=1 keeps the menu (for screenshots of it).
-    if std::env::var_os("TQ2_MENU").is_none() && tests.iter().any(|v| std::env::var_os(v).is_some()) {
+    if std::env::var_os("TQ2_MENU").is_none() && is_test_run() {
         start.write(StartRun);
     }
 }
@@ -151,7 +159,8 @@ fn start_run(
     mut run: ResMut<Run>,
     mut stats: ResMut<player::HeroStats>,
     arena: Res<Arena>,
-    starting: Res<equipment::StartingWeapon>,
+    mut profile: ResMut<profile::Profile>,
+    mut loot: ResMut<equipment::RunLoot>,
     entities: Query<Entity, With<RunEntity>>,
 ) {
     if requests.read().count() == 0 {
@@ -162,41 +171,68 @@ fn start_run(
     }
     *run = Run { level: 1, xp_next: progression::xp_for_level(1), ..default() };
     *stats = player::HeroStats::default();
+    loot.0.clear();
     enemies::reset(&mut commands);
     combat::reset(&mut commands);
-    let start_gear = equipment::Equipment { weapon: starting.0, ..default() };
-    let hero = player::spawn_hero(&mut commands, arena.start, start_gear);
+    if !profile.created {
+        // Tests (and a first start without the menu) get a staff hero.
+        *profile = profile::Profile::new_hero(&equipment::STAFF);
+    }
+    let mut hp = Health { hp: config::PLAYER_HP, max: config::PLAYER_HP };
+    skills::apply(&profile, &mut stats, &mut hp);
+    let mut gear = profile.equipment();
     // Test hook: TQ2_TEST_CHEST=1 drops a chest right next to the hero.
     if std::env::var_os("TQ2_TEST_CHEST").is_some() {
         equipment::drop_chest(&mut commands, &assets, arena.start + Vec2::X);
     }
-    // Test hook: TQ2_TEST_GEAR=bow,ranger starts with that weapon/armour.
+    // Test hook: TQ2_TEST_GEAR=sword,shield,ranger (item ids or short names) - the first
+    // weapon goes to the main hand, the next one-handed item to the off hand.
     if let Ok(list) = std::env::var("TQ2_TEST_GEAR") {
-        let mut gear = start_gear;
+        let mut main_set = false;
         for name in list.split(',').map(str::trim) {
-            match name {
-                "staff" => gear.weapon = &equipment::STAFF,
-                "bow" => gear.weapon = &equipment::BOW,
-                "sword" => gear.weapon = &equipment::SWORD,
-                "scholar" => gear.armor = &equipment::SCHOLAR,
-                "ranger" => gear.armor = &equipment::RANGER,
-                other => warn!("unknown gear {other}"),
+            match equipment::Item::from_id(name).or_else(|| test_gear_alias(name)) {
+                Some(equipment::Item::Weapon(w)) if !main_set => {
+                    gear.equip_main(w);
+                    gear.off = None;
+                    main_set = true;
+                }
+                Some(equipment::Item::Armor(a)) => gear.armor = a,
+                Some(item) => {
+                    if !equipment::OffHand::from_item(item).is_some_and(|o| gear.equip_off(Some(o))) {
+                        warn!("{} does not fit the off hand", item.name());
+                    }
+                }
+                None => warn!("unknown gear {name}"),
             }
         }
-        commands.entity(hero).insert(gear);
     }
     // Test hook: TQ2_TEST_UPGRADES=multishot,multishot,nova applies upgrades at the start.
     if let Ok(list) = std::env::var("TQ2_TEST_UPGRADES") {
-        let mut hp = Health { hp: config::PLAYER_HP, max: config::PLAYER_HP };
         for name in list.split(',') {
             match progression::Upgrade::from_name(name.trim()) {
                 Some(u) => u.apply(&mut stats, &mut hp),
                 None => warn!("unknown upgrade {name}"),
             }
         }
-        commands.entity(hero).insert(hp);
     }
+    let hero = player::spawn_hero(&mut commands, arena.start, gear);
+    commands.entity(hero).insert(hp);
     next.set(GameState::Playing);
+}
+
+/// Short names for TQ2_TEST_GEAR.
+fn test_gear_alias(name: &str) -> Option<equipment::Item> {
+    use equipment::*;
+    Some(match name {
+        "staff" => Item::Weapon(&STAFF),
+        "bow" => Item::Weapon(&BOW),
+        "axe" => Item::Weapon(&AXE),
+        "sword" => Item::Weapon(&SWORD),
+        "peleus" => Item::Weapon(&PELEUS),
+        "shield" => Item::Shield(&HERACLES_SHIELD),
+        "talisman" => Item::Talisman(&ARCANE_MIRROR),
+        _ => return None,
+    })
 }
 
 /// Back in the menu, the arena is empty again.

@@ -28,8 +28,9 @@ fn spawn_camera(mut commands: Commands) {
         Transform::default(),
         CameraRig {
             yaw: 0.6,
-            pitch: 0.95,
-            distance: std::env::var("TQ2_ZOOM").ok().and_then(|z| z.parse().ok()).unwrap_or(24.0),
+            // Test hook: TQ2_PITCH (radians above the horizon) for close-up screenshots.
+            pitch: std::env::var("TQ2_PITCH").ok().and_then(|p| p.parse().ok()).unwrap_or(0.95),
+            distance: env_zoom().unwrap_or(24.0),
             focus: Vec3::ZERO,
         },
     ));
@@ -54,7 +55,7 @@ fn follow(
     let axis = |a: KeyCode, b: KeyCode| keys.pressed(a) as i32 as f32 - keys.pressed(b) as i32 as f32;
     rig.yaw += axis(KeyCode::KeyQ, KeyCode::KeyE) * 1.5 * dt;
     let scroll: f32 = wheel.read().map(|w| w.y).sum();
-    rig.distance = (rig.distance * (1.0 - scroll * 0.1) * (1.0 + axis(KeyCode::KeyF, KeyCode::KeyR) * 1.5 * dt)).clamp(8.0, 80.0);
+    rig.distance = (rig.distance * (1.0 - scroll * 0.1) * (1.0 + axis(KeyCode::KeyF, KeyCode::KeyR) * 1.5 * dt)).clamp(MIN_ZOOM.min(env_zoom().unwrap_or(MIN_ZOOM)), 80.0);
     if let Ok(hero) = hero.single() {
         let lerp = (8.0 * dt).min(1.0);
         rig.focus = rig.focus.lerp(hero.translation, lerp);
@@ -110,4 +111,11 @@ fn hide_occluders(
             *visibility = wanted;
         }
     }
+}
+
+const MIN_ZOOM: f32 = 8.0;
+
+/// Test hook: TQ2_ZOOM sets the start distance (and may go closer than the normal minimum).
+fn env_zoom() -> Option<f32> {
+    std::env::var("TQ2_ZOOM").ok().and_then(|z| z.parse().ok())
 }

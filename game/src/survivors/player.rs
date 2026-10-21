@@ -4,7 +4,7 @@ use bevy::prelude::*;
 use super::camera::CameraRig;
 use super::equipment::Equipment;
 use super::{config, GameState, Health, Pos, Radius, RunEntity, Vel};
-use crate::character::CharacterAnim;
+use crate::character::{CharacterAnim, UpperBodyRig};
 use crate::ground::Ground;
 use crate::obstacles::Obstacles;
 
@@ -24,12 +24,38 @@ pub struct HeroStats {
     pub area: f32,
     pub crit: f32,
     pub pickup: f32,
+    /// Extra fraction of enemy damage absorbed (skill tree), on top of gear.
+    pub armor: f32,
+    /// Multiplier for Fire Nova and Meteor damage.
+    pub skill_damage: f32,
+    /// Multiplier for collected experience.
+    pub xp: f32,
+    /// Skills unlocked in the skill tree; only those are offered at level-ups.
+    pub nova_unlocked: bool,
+    pub meteor_unlocked: bool,
     pub nova_level: u32,
+    pub meteor_level: u32,
 }
 
 impl Default for HeroStats {
     fn default() -> Self {
-        Self { damage: 1.0, cooldown: 1.0, projectiles: 1, pierce: 0, speed: 1.0, area: 1.0, crit: 0.05, pickup: 1.0, nova_level: 0 }
+        Self {
+            damage: 1.0,
+            cooldown: 1.0,
+            projectiles: 1,
+            pierce: 0,
+            speed: 1.0,
+            area: 1.0,
+            crit: 0.05,
+            pickup: 1.0,
+            armor: 0.0,
+            skill_damage: 1.0,
+            xp: 1.0,
+            nova_unlocked: false,
+            meteor_unlocked: false,
+            nova_level: 0,
+            meteor_level: 0,
+        }
     }
 }
 
@@ -43,13 +69,14 @@ pub fn spawn_hero(commands: &mut Commands, at: Vec2, equipment: Equipment) -> En
     let hero = commands
         .spawn((
             Hero,
+            UpperBodyRig,
             RunEntity,
             Pos(at),
             Vel::default(),
             Radius(HERO_RADIUS),
             Health { hp: config::PLAYER_HP, max: config::PLAYER_HP },
             // Parts, carried weapon and stance follow the equipment (see equipment.rs).
-            CharacterAnim::looping(equipment.weapon.idle),
+            CharacterAnim::looping(equipment.stance().idle),
             equipment,
             Transform::default(),
             Visibility::default(),
@@ -86,7 +113,8 @@ fn move_hero(
 
 fn animate_hero(mut hero: Query<(&Vel, &Equipment, &mut CharacterAnim), With<Hero>>) {
     for (vel, eq, mut anim) in &mut hero {
-        let clip = if vel.0.length_squared() > 0.1 { eq.weapon.run } else { eq.weapon.idle };
+        let stance = eq.stance();
+        let clip = if vel.0.length_squared() > 0.1 { stance.run } else { stance.idle };
         if anim.clip != clip {
             *anim = CharacterAnim::looping(clip);
         }

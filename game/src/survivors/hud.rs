@@ -5,7 +5,8 @@ use super::player::{Hero, HeroStats};
 use super::progression::Offer;
 use super::{GameState, Health, Run};
 use super::combat::Hit;
-use super::equipment::{Equipment, Gear, LootOffer};
+use super::equipment::{LootOffer, RunLoot};
+use super::profile::LastReward;
 use crate::fonts::TitleFont;
 use crate::ground::Ground;
 use crate::survivors::enemies::Enemy;
@@ -40,7 +41,7 @@ pub fn plugin(app: &mut App) {
         .add_systems(OnEnter(GameState::Loot), show_loot)
         .add_systems(OnExit(GameState::Loot), despawn::<LootPanel>)
         .add_systems(Update, choose_loot.run_if(in_state(GameState::Loot)))
-        .add_systems(OnEnter(GameState::GameOver), show_end)
+        .add_systems(OnEnter(GameState::GameOver), show_end.after(super::profile::bank_run))
         .add_systems(OnExit(GameState::GameOver), despawn::<EndPanel>);
 }
 
@@ -66,6 +67,7 @@ fn spawn_hud(mut commands: Commands) {
 
 fn update_hud(
     run: Res<Run>,
+    loot: Res<RunLoot>,
     hero: Query<&Health, With<Hero>>,
     enemies: Query<(&Enemy, &Health)>,
     mut life: Query<&mut Node, (With<LifeFill>, Without<XpFill>)>,
@@ -86,8 +88,9 @@ fn update_hud(
             .map(|(e, hp)| format!("
 Boss: {} {:.0} %", e.def.name, hp.hp / hp.max * 100.0))
             .unwrap_or_default();
+        let found = if loot.0.is_empty() { String::new() } else { format!("   Loot: {}", loot.0.len()) };
         text.0 = format!(
-            "Level {}   {:02}:{:02} / 10:00   Kills: {}   Enemies: {}{boss}",
+            "Level {}   {:02}:{:02} / 10:00   Kills: {}   Enemies: {}{found}{boss}",
             run.level,
             t / 60,
             t % 60,
@@ -216,7 +219,8 @@ fn choose_upgrade(
 
 fn show_loot(mut commands: Commands, offer: Res<LootOffer>, title: Res<TitleFont>) {
     commands.spawn(panel(LootPanel)).with_children(|p| {
-        p.spawn((Text::new("Chest opened – choose your gear"), title.at(36.0)));
+        p.spawn((Text::new("Chest opened – choose an item"), title.at(36.0)));
+        p.spawn((Text::new("It goes to your stash at the end of the run; equip it in the armoury."), TextFont { font_size: FontSize::Px(18.0), ..default() }));
         for (i, gear) in offer.0.iter().enumerate() {
             p.spawn((
                 Node { width: Val::Px(620.0), padding: UiRect::all(Val::Px(14.0)), ..default() },
@@ -234,7 +238,7 @@ fn choose_loot(
     mut clicked: ResMut<ClickedChoice>,
     offer: Res<LootOffer>,
     audio: Res<crate::audio::Audio>,
-    mut hero: Query<&mut Equipment, With<Hero>>,
+    mut loot: ResMut<RunLoot>,
     mut next: ResMut<NextState<GameState>>,
 ) {
     let keys_pick = [KeyCode::Digit1, KeyCode::Digit2, KeyCode::Digit3].iter().position(|k| keys.just_pressed(*k));
@@ -243,25 +247,29 @@ fn choose_loot(
         next.set(GameState::Playing);
         return;
     }
-    let Some(gear) = keys_pick.or(clicked.0.take()).or(auto_pick).and_then(|i| offer.0.get(i)) else { return };
-    if let Ok(mut eq) = hero.single_mut() {
-        match *gear {
-            Gear::Weapon(w) => eq.weapon = w,
-            Gear::Armor(a) => eq.armor = a,
-        }
-        info!("equipped {}", gear.title());
-    }
+    let Some(item) = keys_pick.or(clicked.0.take()).or(auto_pick).and_then(|i| offer.0.get(i)) else { return };
+    loot.0.push(*item);
+    info!("looted {}", item.name());
     audio.play(super::content::sound::PICK, None, 0.9, 0.0);
     next.set(GameState::Playing);
 }
 
-fn show_end(mut commands: Commands, run: Res<Run>, title_font: Res<TitleFont>) {
+fn show_end(mut commands: Commands, run: Res<Run>, reward: Res<LastReward>, title_font: Res<TitleFont>) {
     let title = if run.won { "You survived! The Titans are impressed." } else { "You have fallen." };
+    let items = if reward.items.is_empty() { "none".to_string() } else { reward.items.join(", ") };
     commands.spawn(panel(EndPanel)).with_children(|p| {
         p.spawn((Text::new(title), title_font.at(44.0)));
         p.spawn((
-            Text::new(format!("Level {}   Kills: {}   Time {:02}:{:02}\n\nR – restart     M – main menu", run.level, run.kills, run.time as u32 / 60, run.time as u32 % 60)),
+            Text::new(format!(
+                "Level {}   Kills: {}   Time {:02}:{:02}\n\nFavour earned: {}   Items to the stash: {items}\n\nR – restart     M – main menu",
+                run.level,
+                run.kills,
+                run.time as u32 / 60,
+                run.time as u32 % 60,
+                reward.favor
+            )),
             TextFont { font_size: FontSize::Px(24.0), ..default() },
+            TextLayout::justify(Justify::Center),
         ));
     });
 }

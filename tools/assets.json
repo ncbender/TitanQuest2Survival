@@ -16,16 +16,48 @@
       "anims": [
         "TQ2/Content/TQ2/Character/Human/Male/Animation/Staff_2H",
         "TQ2/Content/TQ2/Character/Human/Male/Animation/Bow",
-        "TQ2/Content/TQ2/Character/Human/Male/Animation/Sword"
+        "TQ2/Content/TQ2/Character/Human/Male/Animation/Sword",
+        "TQ2/Content/TQ2/Character/Human/Male/Animation/Sword+Shield",
+        "TQ2/Content/TQ2/Character/Human/Male/Animation/Sword+Sword",
+        "TQ2/Content/TQ2/Character/Human/Male/Animation/Sword+Talisman",
+        "TQ2/Content/TQ2/Character/Human/Male/Animation/Axe_2H"
       ],
       "clips": [
-        "a_male_staff2h_",
+        "a_male_staff2h_idle_combat_01",
+        "a_male_staff2h_run_01",
+        "a_male_staff2h_attack_01_01",
+        "a_male_staff2h_attack_02_01",
+        "a_male_staff2h_attack_03_01",
         "a_male_bow_idle_combat_01",
         "a_male_bow_run_01",
         "a_male_bow_attack_01_01",
+        "a_male_bow_attack_02_01",
+        "a_male_bow_attack_03_01",
         "a_male_sword_idle_combat_01",
         "a_male_sword_run_01",
-        "a_male_sword_attack_01_01"
+        "a_male_sword_attack_01_01",
+        "a_male_sword_attack_02_01",
+        "a_male_sword_attack_03_01",
+        "a_male_sword+shield_idle_combat_01",
+        "a_male_sword+shield_run_01",
+        "a_male_sword+shield_attack_01_01",
+        "a_male_sword+shield_attack_02_01",
+        "a_male_sword+shield_attack_03_01",
+        "a_male_sword+sword_idle_combat_01",
+        "a_male_sword+sword_run_01",
+        "a_male_sword+sword_attack_01_01",
+        "a_male_sword+sword_attack_02_01",
+        "a_male_sword+sword_attack_03_01",
+        "a_male_sword+talisman_idle_combat_01",
+        "a_male_sword+talisman_run_01",
+        "a_male_sword+talisman_attack_01_01",
+        "a_male_sword+talisman_attack_02_01",
+        "a_male_sword+talisman_attack_03_01",
+        "a_male_axe2h_idle_combat_01",
+        "a_male_axe2h_run_01",
+        "a_male_axe2h_attack_01_01",
+        "a_male_axe2h_attack_02_01",
+        "a_male_axe2h_attack_03_01"
       ]
     },
     "boarman": {
@@ -114,7 +146,11 @@
     "weapons": [
       "TQ2/Content/TQ2/Character/Human/Weapon/Staff2H/Unique/Staff2H_Staff_Of_Apollo_01/sm_staff2h_staff_of_apollo_01.uasset",
       "TQ2/Content/TQ2/Character/Human/Weapon/Bow2H/Unique/Bow2H_Arch_Of_Iris_Narrow_01/sk_bow2h_arch_of_iris_narrow_01.uasset",
-      "TQ2/Content/TQ2/Character/Human/Weapon/Sword1h/Unique/Sword1H_Battlemage_Sword_01/sm_sword1h_battlemage_sword_01.uasset"
+      "TQ2/Content/TQ2/Character/Human/Weapon/Sword1h/Unique/Sword1H_Battlemage_Sword_01/sm_sword1h_battlemage_sword_01.uasset",
+      "TQ2/Content/TQ2/Character/Human/Weapon/Sword1h/Unique/Sword1H_Sword_Of_Peleus_01/sm_sword1h_sword_of_peleus_01.uasset",
+      "TQ2/Content/TQ2/Character/Human/Weapon/Axe2H/Unique/Axe2H_Sickle_Of_Kronos_01/sm_axe2h_sickle_of_kronos_01.uasset",
+      "TQ2/Content/TQ2/Character/Human/Weapon/Shield1h/Unique/Shield1H_Shield_Of_Heracles_01/sm_shield1h_shield_of_heracles_01.uasset",
+      "TQ2/Content/TQ2/Character/Human/Weapon/Talisman1H/Unique/Talisman1H_Arcane_Mirror_01/sk_talisman1h_arcane_mirror_01.uasset"
     ]
   },
   "scenes": {

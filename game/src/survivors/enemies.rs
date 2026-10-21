@@ -193,6 +193,7 @@ fn chase_and_attack(
     ground: Res<Ground>,
     obstacles: Res<Obstacles>,
     field: Res<FlowField>,
+    stats: Res<super::player::HeroStats>,
     mut hero: Query<(&Pos, &mut Health, &Equipment), (With<Hero>, Without<Enemy>)>,
     mut enemies: Query<(Entity, &mut Pos, &mut Vel, &Radius, &mut Enemy, &mut CharacterAnim), Without<Hero>>,
 ) {
@@ -227,7 +228,7 @@ fn chase_and_attack(
             vel.0 = to_hero.normalize_or_zero() * 0.01; // keep facing the hero
             if enemy.attack_timer <= 0.0 {
                 enemy.attack_timer = config::ATTACK_COOLDOWN;
-                hero_hp.hp -= enemy.damage * (1.0 - gear.armor.armor);
+                hero_hp.hp -= enemy.damage * (1.0 - (gear.damage_reduction() + stats.armor).min(0.8));
                 *anim = CharacterAnim::once(def.attack);
             }
         } else {
