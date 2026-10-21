@@ -188,7 +188,7 @@ fn start_run(
     }
     *run = Run { level: 1, xp_next: progression::xp_for_level(1), ..default() };
     // The loaded map decides the arena (`--scene` can load any arena's map directly).
-    let arena_def = arenas::ARENAS.iter().find(|a| a.scene == selected.0).unwrap_or_else(|| arenas::by_id(&profile.arena));
+    let arena_def = arenas::for_map(&selected.0).unwrap_or_else(|| arenas::by_id(&profile.arena));
     info!("arena: {}", arena_def.name);
     commands.insert_resource(arenas::CurrentArena(arena_def));
     *stats = player::HeroStats::default();
@@ -339,8 +339,18 @@ fn follow_ground(
     }
 }
 
-fn restart(keys: Res<ButtonInput<KeyCode>>, state: Res<State<GameState>>, mut start: MessageWriter<StartRun>) {
+fn restart(
+    keys: Res<ButtonInput<KeyCode>>,
+    state: Res<State<GameState>>,
+    arena: Res<arenas::CurrentArena>,
+    mut map: ResMut<crate::map::SelectedMap>,
+    mut start: MessageWriter<StartRun>,
+) {
     if *state.get() == GameState::GameOver && keys.just_pressed(KeyCode::KeyR) {
+        // A generated arena is rebuilt with a new seed.
+        if arena.0.scene.starts_with("gen:") {
+            map.0 = arenas::map_for_run(arena.0);
+        }
         start.write(StartRun);
     }
 }

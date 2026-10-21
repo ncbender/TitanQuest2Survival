@@ -146,6 +146,11 @@ the extra skeletons of mane/arm-hair parts were the main cost.
 - Terrain holes in exported maps are marked in ground.json and blocked; cliffs steeper than
   ~50° are not walkable; every landscape material of a map gets the blended shader.
 - Camera slightly flatter (pitch 0.85 rad, 26 m).
+- Kits moved to `tools/kits.json` (177 TQ2 meshes, 8 ground texture sets in three themes),
+  exported by `Tq2Extract kit` into `cache/export/kit`; no world-partition survey or region
+  export is needed any more. Every run gets a new seed and a random 60 % of each pool, so a
+  theme never looks the same twice (verified: two seeds per theme differ in border, cover and
+  clutter; 42–50 % of the free area 8+ m from obstacles).
 
 ## Blockers / risks
 

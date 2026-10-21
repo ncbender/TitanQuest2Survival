@@ -73,6 +73,11 @@ switch (command)
             float.Parse(args[3], System.Globalization.CultureInfo.InvariantCulture), float.Parse(args[4], System.Globalization.CultureInfo.InvariantCulture));
         break;
 
+    case "kit":
+        // kit: meshes and ground textures of tools/kits.json -> cache/export/kit
+        await Kit.Run(provider, root, cache);
+        break;
+
     case "cells":
         // cells: survey of the Greece world partition cells (position, content) -> cache/cells.json
         Cells.Run(provider, cache);

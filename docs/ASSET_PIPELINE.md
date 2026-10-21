@@ -162,7 +162,15 @@ and the icons/artwork as PNG:
 UI frames/backgrounds (`ui`), item icons (`items`) and skill VFX textures (`vfx`) are loose
 texture lists in `tools/assets.json`.
 
-## World partition regions (arenas)
+## Arena kits
+
+`dotnet run -- kit` (also part of `assets`) reads `tools/kits.json` (per theme: border, cover
+and clutter pools as `[mesh, min scale, max scale, weight]`, three ground texture sets),
+finds each mesh's package by name (environment art first), and writes `cache/export/kit`:
+meshes, materials.json, colliders.json, `textures/<set>_a/_n.png` and a copy of kits.json that
+the game reads.
+
+## World partition regions (no longer used by the arenas)
 
 - `l_gr_p` (Greece) has 5,947 generated cells with hashed names; `Tq2Extract cells` surveys them
   into `cache/cells.json` (3,920 non-empty; every cell loaded, none failed). Persistent level

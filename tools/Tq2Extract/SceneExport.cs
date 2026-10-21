@@ -86,6 +86,10 @@ static class SceneExport
         await Build(provider, cache, name, $"region {x} {y} {radius}", placements, meshes);
     }
 
+    /// Meshes placed at the origin only, for their glb, materials and collision (Kit.cs).
+    internal static Task BuildKit(DefaultFileProvider provider, string cache, string name, List<Placement> placements, Dictionary<string, UObject> meshes) =>
+        Build(provider, cache, name, "kit", placements, meshes);
+
     static async Task Build(DefaultFileProvider provider, string cache, string name, string mapPath, List<Placement> placements, Dictionary<string, UObject> meshes)
     {
         var outDir = Path.Combine(cache, "export", name);

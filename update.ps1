@@ -36,7 +36,7 @@ if (-not (Test-Path (Join-Path $root "cache\natives\CUE4Parse-Natives.dll"))) {
 
 # Assets only need re-extracting when the extractor or its asset list changed.
 $stamp = Join-Path $root "cache\assets.stamp"
-$toolsRev = (git log -1 --format=%H -- tools/Tq2Extract tools/assets.json)
+$toolsRev = (git log -1 --format=%H -- tools/Tq2Extract tools/assets.json tools/kits.json)
 $done = if (Test-Path $stamp) { (Get-Content $stamp -Raw).Trim() } else { "" }
 if ($Assets -or $toolsRev -ne $done) {
     Write-Host "== Extracting assets from your TQ2 install (takes a while)" -ForegroundColor Yellow

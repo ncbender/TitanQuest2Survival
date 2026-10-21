@@ -3,6 +3,7 @@
 //! placed by a seeded generator. Layout: an open square field (gentle hills, scattered cover
 //! with wide gaps, a free centre), ringed by a border of large pieces on rising ground.
 use bevy::prelude::*;
+use serde::Deserialize;
 use std::collections::HashMap;
 
 use crate::ground::Ground;
@@ -15,139 +16,47 @@ pub const PLAY: f32 = 58.0;
 /// Half size of the generated ground (the border ring and hills lie between PLAY and this).
 const EDGE: f32 = 88.0;
 
-/// A TQ2 mesh of a kit: `dir/meshes/<mesh>.glb`, its scale range and spawn weight.
-pub struct Piece {
-    pub dir: &'static str,
-    pub mesh: &'static str,
-    pub scale: (f32, f32),
-    pub weight: u32,
-}
+/// Export folder of the kits (`Tq2Extract kit`, from tools/kits.json).
+const KIT_DIR: &str = "kit";
 
-const fn p(dir: &'static str, mesh: &'static str, scale: (f32, f32), weight: u32) -> Piece {
-    Piece { dir, mesh, scale, weight }
-}
+/// A TQ2 mesh of a kit: name (`kit/meshes/<name>.glb`), scale range and spawn weight, written
+/// as `["sm_tree_pine_03a", 1.0, 1.4, 2]` in kits.json.
+#[derive(Deserialize, Clone)]
+pub struct Piece(pub String, pub f32, pub f32, pub u32);
 
-/// A ground layer: texture set name below `<dir>/textures/` (albedo `<set>_a.png`, normal
-/// `<set>_n.png`).
-pub struct Layer {
-    pub dir: &'static str,
-    pub set: &'static str,
-}
-
-const fn l(dir: &'static str, set: &'static str) -> Layer {
-    Layer { dir, set }
-}
-
+#[derive(Deserialize, Clone)]
 pub struct Kit {
-    pub id: &'static str,
     /// Large pieces forming the arena's edge.
-    pub border: &'static [Piece],
+    pub border: Vec<Piece>,
     /// Obstacles scattered over the field (with collision).
-    pub cover: &'static [Piece],
+    pub cover: Vec<Piece>,
     /// Small decoration without collision (grass, flowers, pebbles).
-    pub clutter: &'static [Piece],
-    /// Ground layers: base, patches, edge.
-    pub ground: [Layer; 3],
+    pub clutter: Vec<Piece>,
+    /// Ground texture sets (`kit/textures/<set>_a.png`, `_n.png`): base, patches, edge.
+    pub ground: Vec<String>,
     pub cover_count: usize,
     pub clutter_count: usize,
 }
 
-pub const KITS: &[Kit] = &[
-    Kit {
-        id: "woods",
-        border: &[
-            p("menu2", "sm_tree_olive_large_01a", (0.9, 1.2), 3),
-            p("menu2", "sm_tree_pine_03a", (1.0, 1.4), 3),
-            p("menu2", "sm_tree_pine_05a", (1.0, 1.3), 2),
-            p("menu2", "sm_bush_cypress_patch_01c", (0.9, 1.1), 2),
-            p("menu2", "sm_rock_greek_chunk_06a", (1.0, 1.5), 2),
-            p("menu2", "sm_rock_greek_shelf_01a", (0.8, 1.1), 1),
-        ],
-        cover: &[
-            p("menu2", "sm_rock_greek_boulder_02a", (1.3, 2.2), 2),
-            p("menu2", "sm_rock_greek_boulder_03a", (1.3, 2.2), 2),
-            p("menu2", "sm_rock_greek_chunk_04a", (0.5, 0.7), 1),
-            p("forest", "sm_bush_thorn_02a", (1.0, 1.3), 3),
-            p("menu2", "sm_bush_olive_01a", (1.0, 1.3), 3),
-            p("menu2", "sm_tree_pine_03a", (0.8, 1.0), 2),
-            p("menu2", "sm_rock_greek_boulder_01a", (1.2, 2.0), 3),
-        ],
-        clutter: &[
-            p("forest", "sm_grass_short_new_01a", (0.9, 1.4), 8),
-            p("forest", "sm_grass_short_new_03a", (1.0, 1.5), 4),
-            p("forest", "sm_boston_fern_03a", (0.8, 1.2), 3),
-            p("forest", "sm_flower_cornflower_01a", (0.9, 1.2), 2),
-            p("forest", "sm_flower_star_01b", (0.9, 1.2), 2),
-            p("forest", "sm_zamia_palm_05a", (0.8, 1.1), 2),
-            p("forest", "sm_spindle_16a", (0.9, 1.2), 2),
-            p("forest", "sm_pebbles_03", (0.8, 1.2), 1),
-        ],
-        ground: [l("forest", "t_grass_mixed_01a"), l("forest", "t_mud_grass_01a"), l("forest", "t_rock_ground_cracked_01a")],
-        cover_count: 34,
-        clutter_count: 900,
-    },
-    Kit {
-        id: "necropolis",
-        border: &[
-            p("graveyard", "sm_wall_stone_4m_01a", (1.0, 1.0), 4),
-            p("graveyard", "sm_wall_13a", (1.0, 1.0), 2),
-            p("graveyard", "sm_obelisk_01a", (0.9, 1.1), 1),
-            p("graveyard", "sm_column_corner_02a", (1.0, 1.0), 1),
-            p("menu2", "sm_tree_pine_03a", (1.0, 1.3), 2),
-            p("menu2", "sm_rock_greek_chunk_06a", (1.0, 1.4), 2),
-        ],
-        cover: &[
-            p("graveyard", "sm_sarcophagus_02a", (1.0, 1.2), 4),
-            p("graveyard", "sm_pedestal_04a", (1.0, 1.1), 2),
-            p("graveyard", "sm_column_02a", (0.8, 1.0), 2),
-            p("graveyard", "sm_wall_stone_2m_broken_01a", (1.0, 1.0), 3),
-            p("graveyard", "sm_wall_stone_4m_broken_01a", (1.0, 1.0), 2),
-            p("graveyard", "sm_brazier_01a", (1.0, 1.2), 2),
-            p("graveyard", "sm_obelisk_01a", (0.6, 0.8), 1),
-        ],
-        clutter: &[
-            p("graveyard", "sm_grass_short_new_01a", (0.9, 1.4), 8),
-            p("graveyard", "sm_grass_directional_02", (0.9, 1.3), 4),
-            p("graveyard", "sm_skeleton_01a", (1.0, 1.0), 1),
-            p("graveyard", "sm_candle_01a_assembly", (1.0, 1.4), 2),
-            p("graveyard", "sm_centaurvessel_cluster_05_mat01", (0.9, 1.1), 1),
-            p("menu2", "sm_wall_stone_pile_01a", (0.8, 1.2), 3),
-        ],
-        ground: [l("graveyard", "t_soil_gravel_01"), l("graveyard", "t_grass_green_01a"), l("graveyard", "t_rock_ground_cave_02a")],
-        cover_count: 40,
-        clutter_count: 700,
-    },
-    Kit {
-        id: "village",
-        border: &[
-            p("village", "sm_wall_low_tegea_01b", (1.0, 1.0), 4),
-            p("village", "sm_wall_low_pylon_tegea_01a", (1.0, 1.0), 2),
-            p("village", "sm_wall_pylon_tegea_01a", (1.0, 1.0), 1),
-            p("menu2", "sm_tree_olive_large_01a", (0.9, 1.1), 2),
-            p("menu2", "sm_rock_greek_chunk_06a", (1.0, 1.4), 2),
-        ],
-        cover: &[
-            p("village", "sm_column_02_small_01a", (0.9, 1.0), 3),
-            p("menu2", "sm_rock_greek_boulder_02a", (1.3, 2.0), 2),
-            p("village", "sm_centaurvessel_cluster_02_mat01", (1.0, 1.3), 2),
-            p("village", "sm_shrine_demeter_brazier_01a", (1.0, 1.1), 1),
-            p("village", "sm_statue_moirai_clotho_rod_01", (0.9, 1.0), 1),
-            p("village", "sm_dirtyMesh_wall_low_pylon_tegea_01a2", (1.0, 1.0), 2),
-            p("menu2", "sm_bush_olive_01a", (1.0, 1.3), 2),
-        ],
-        clutter: &[
-            p("village", "sm_pot_piece_03a", (1.0, 1.5), 3),
-            p("village", "sm_pebbles_02", (0.8, 1.3), 4),
-            p("village", "sm_vase_clay_13a_painted_01", (0.9, 1.1), 2),
-            p("village", "sm_pot_broken_02b", (0.9, 1.1), 2),
-            p("menu2", "sm_grass_short_new_01a", (0.9, 1.3), 5),
-            p("menu2", "sm_shrub_rosemary_large_01a", (0.8, 1.2), 2),
-        ],
-        ground: [l("village", "t_sand_beach_fine_01a"), l("village", "t_floor_stones_01a"), l("village", "t_soil_gravel_01")],
-        cover_count: 36,
-        clutter_count: 500,
-    },
-];
+/// The kit `id` from the exported kits.json (None until `Tq2Extract kit` ran).
+pub fn kit(id: &str) -> Option<Kit> {
+    let path = format!("{}/{KIT_DIR}/kits.json", crate::export_root());
+    let text = std::fs::read_to_string(&path).ok()?;
+    let mut kits: HashMap<String, Kit> = serde_json::from_str(&text).map_err(|e| error!("{path}: {e}")).ok()?;
+    kits.remove(id)
+}
+
+/// Each run uses a random part of every pool, so arenas of one theme differ in their pieces too.
+fn sample(rng: &mut fastrand::Rng, pool: &[Piece]) -> Vec<Piece> {
+    let mut picked: Vec<Piece> = pool.iter().filter(|_| rng.f32() < 0.6).cloned().collect();
+    while picked.len() < pool.len().min(3) {
+        let p = &pool[rng.usize(..pool.len())];
+        if !picked.iter().any(|q| q.0 == p.0) {
+            picked.push(p.clone());
+        }
+    }
+    picked
+}
 
 /// Seeded value noise in [0, 1] with cells of `size` metres.
 fn noise(seed: u64, p: Vec2, size: f32) -> f32 {
@@ -222,13 +131,14 @@ impl Measured<'_> {
     }
 }
 
-fn measure<'a>(root: &str, pieces: &'a [Piece]) -> Vec<Measured<'a>> {
+/// Pieces with their glb bounds; pieces wider than `max_radius` (m) are left out of the role.
+fn measure<'a>(root: &str, pieces: &'a [Piece], max_radius: f32) -> Vec<Measured<'a>> {
     pieces
         .iter()
         .filter_map(|piece| {
-            let rel = format!("{}/meshes/{}.glb", piece.dir, piece.mesh);
+            let rel = format!("{KIT_DIR}/meshes/{}.glb", piece.0);
             match glb_bounds(&format!("{root}/{rel}")) {
-                Some((lo, hi)) => Some(Measured { piece, path: rel, lo, hi }),
+                Some((lo, hi)) => Some(Measured { piece, path: rel, lo, hi }).filter(|m| m.radius() * piece.1 <= max_radius),
                 None => {
                     warn!("mapgen: {rel} missing");
                     None
@@ -239,13 +149,13 @@ fn measure<'a>(root: &str, pieces: &'a [Piece]) -> Vec<Measured<'a>> {
 }
 
 fn pick<'a>(rng: &mut fastrand::Rng, pieces: &'a [Measured<'a>]) -> Option<&'a Measured<'a>> {
-    let total: u32 = pieces.iter().map(|m| m.piece.weight).sum();
+    let total: u32 = pieces.iter().map(|m| m.piece.3).sum();
     let mut roll = rng.u32(0..total.max(1));
     for m in pieces {
-        if roll < m.piece.weight {
+        if roll < m.piece.3 {
             return Some(m);
         }
-        roll -= m.piece.weight;
+        roll -= m.piece.3;
     }
     pieces.first()
 }
@@ -258,7 +168,7 @@ pub struct Generated {
 }
 
 /// Builds the arena of `kit` with `seed` into the world (props, ground mesh, terrain material).
-pub fn build(world: &mut World, kit: &Kit, seed: u64) -> Generated {
+pub fn build(world: &mut World, id: &str, kit: &Kit, seed: u64) -> Generated {
     let root = crate::export_root();
     let started = std::time::Instant::now();
     let mut rng = fastrand::Rng::with_seed(seed);
@@ -270,21 +180,14 @@ pub fn build(world: &mut World, kit: &Kit, seed: u64) -> Generated {
     let mut ground = Ground::from_heights(origin, 1.0, n, n, heights.clone());
     ground.limit = Some(Rect::from_center_half_size(Vec2::ZERO, Vec2::splat(PLAY)));
 
-    // Materials and collision of every source folder.
-    let mut dirs: Vec<&str> = kit.border.iter().chain(kit.cover).chain(kit.clutter).map(|p| p.dir).chain(kit.ground.iter().map(|l| l.dir)).collect();
-    dirs.sort();
-    dirs.dedup();
-    let mut shapes = HashMap::new();
-    for dir in &dirs {
-        world.resource_mut::<MaterialLibrary>().load_dir(&root, dir);
-        for (mesh, s) in tq2_scene::colliders(&root, dir) {
-            shapes.insert(format!("{dir}/{mesh}"), s);
-        }
-    }
+    // Materials and collision of the kit's pieces.
+    world.resource_mut::<MaterialLibrary>().load_dir(&root, KIT_DIR);
+    let shapes: HashMap<String, _> = tq2_scene::colliders(&root, KIT_DIR).into_iter().map(|(mesh, s)| (format!("{KIT_DIR}/{mesh}"), s)).collect();
 
-    let border = measure(&root, kit.border);
-    let cover = measure(&root, kit.cover);
-    let clutter = measure(&root, kit.clutter);
+    let (border, cover, clutter) = (sample(&mut rng, &kit.border), sample(&mut rng, &kit.cover), sample(&mut rng, &kit.clutter));
+    let border = measure(&root, &border, 40.0);
+    let cover = measure(&root, &cover, 6.0);
+    let clutter = measure(&root, &clutter, 2.5);
     let mut obstacles = Obstacles::default();
     let mut placed: Vec<(Vec2, f32)> = vec![];
     let mut props: Vec<(String, Transform, bool)> = vec![];
@@ -312,7 +215,7 @@ pub fn build(world: &mut World, kit: &Kit, seed: u64) -> Generated {
                 _ => Vec2::new(-side, -t),
             } + Vec2::new(rng.f32() - 0.5, rng.f32() - 0.5) * 3.0;
             let Some(m) = pick(&mut rng, &border) else { break };
-            let scale = m.piece.scale.0 + rng.f32() * (m.piece.scale.1 - m.piece.scale.0);
+            let scale = m.piece.1 + rng.f32() * (m.piece.2 - m.piece.1);
             // Walls face along the edge; everything else turns freely.
             let along = [0.0, std::f32::consts::FRAC_PI_2, 0.0, std::f32::consts::FRAC_PI_2][(k as usize).min(3)];
             let yaw = if m.path.contains("wall") { along } else { rng.f32() * std::f32::consts::TAU };
@@ -330,7 +233,7 @@ pub fn build(world: &mut World, kit: &Kit, seed: u64) -> Generated {
             continue;
         }
         let Some(m) = pick(&mut rng, &cover) else { break };
-        let scale = m.piece.scale.0 + rng.f32() * (m.piece.scale.1 - m.piece.scale.0);
+        let scale = m.piece.1 + rng.f32() * (m.piece.2 - m.piece.1);
         let r = m.radius() * scale;
         // At least 7 m of open ground between pieces keeps the field wide.
         if placed.iter().any(|(q, qr)| q.distance(at) < r + qr + 7.0) {
@@ -347,7 +250,7 @@ pub fn build(world: &mut World, kit: &Kit, seed: u64) -> Generated {
             continue;
         }
         let Some(m) = pick(&mut rng, &clutter) else { break };
-        let scale = m.piece.scale.0 + rng.f32() * (m.piece.scale.1 - m.piece.scale.0);
+        let scale = m.piece.1 + rng.f32() * (m.piece.2 - m.piece.1);
         place(m, at, rng.f32() * std::f32::consts::TAU, scale, false, &mut props);
     }
 
@@ -362,7 +265,7 @@ pub fn build(world: &mut World, kit: &Kit, seed: u64) -> Generated {
     }
 
     spawn_ground(world, kit, seed, &ground, &heights, n, origin, &root);
-    info!("mapgen {} (seed {seed}): {} props, {} obstacle shapes in {:.1} s", kit.id, props.len(), obstacles.len(), started.elapsed().as_secs_f32());
+    info!("mapgen {id} (seed {seed}): {} props, {} obstacle shapes in {:.1} s", props.len(), obstacles.len(), started.elapsed().as_secs_f32());
     Generated { ground, obstacles, start: Vec2::ZERO }
 }
 
@@ -421,7 +324,7 @@ fn spawn_ground(world: &mut World, kit: &Kit, seed: u64, ground: &Ground, height
     let layers = maps
         .into_iter()
         .zip(&kit.ground)
-        .map(|(w, l)| (w, format!("{root}/{}/textures/{}_a.png", l.dir, l.set), Some(format!("{root}/{}/textures/{}_n.png", l.dir, l.set))))
+        .map(|(w, set)| (w, format!("{root}/{KIT_DIR}/textures/{set}_a.png"), Some(format!("{root}/{KIT_DIR}/textures/{set}_n.png"))))
         .collect();
     let end = origin + Vec2::splat((n - 1) as f32);
     let material = crate::terrain::build_material(world, layers, 0.25, Vec4::new(origin.x, origin.y, end.x, end.y));

@@ -429,7 +429,7 @@ fn main_menu_input(
                 if profile.arena != a.id {
                     profile.arena = a.id.to_string();
                 }
-                map.0 = a.scene.to_string();
+                map.0 = arenas::map_for_run(a);
                 start.write(StartRun);
             }
         }

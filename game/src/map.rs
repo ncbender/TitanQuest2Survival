@@ -38,9 +38,12 @@ pub fn load(world: &mut World, scene: &str) {
         let mut parts = spec.split(':');
         let id = parts.next().unwrap_or_default();
         let seed = parts.next().and_then(|s| s.parse().ok()).unwrap_or_else(|| id.bytes().fold(7u64, |h, b| h.wrapping_mul(31).wrapping_add(b as u64)));
-        let kit = crate::mapgen::KITS.iter().find(|k| k.id == id).unwrap_or(&crate::mapgen::KITS[0]);
+        let Some(kit) = crate::mapgen::kit(id) else {
+            error!("generated arena {id}: no kit (run `Tq2Extract kit`)");
+            return;
+        };
         world.remove_resource::<crate::terrain::Terrain>();
-        let generated = crate::mapgen::build(world, kit, seed);
+        let generated = crate::mapgen::build(world, id, &kit, seed);
         spawn_pit_floor(world, &generated.ground);
         world.insert_resource(generated.ground);
         world.insert_resource(generated.obstacles);

@@ -412,21 +412,5 @@
       "t_icon_weapon_itemicon_weapon_talisman1h_molten_orb"
     ]
   },
-  "regions": {
-    "forest": [
-      -2040,
-      -360,
-      90
-    ],
-    "graveyard": [
-      -1800,
-      0,
-      90
-    ],
-    "village": [
-      -1680,
-      240,
-      90
-    ]
-  }
+  "regions": {}
 }

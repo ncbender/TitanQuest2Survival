@@ -75,9 +75,19 @@ pub fn available(a: &ArenaDef) -> bool {
     let root = crate::export_root();
     let has = |dir: &str| std::path::Path::new(&root).join(dir).join("scene.json").is_file();
     match a.scene.strip_prefix("gen:") {
-        Some(id) => crate::mapgen::KITS.iter().find(|k| k.id == id).is_some_and(|k| k.border.iter().chain(k.cover).chain(k.clutter).all(|p| has(p.dir))),
+        Some(id) => crate::mapgen::kit(id).is_some(),
         None => has(a.scene),
     }
+}
+
+/// The map to load for a run: generated arenas get a fresh seed every run.
+pub fn map_for_run(a: &ArenaDef) -> String {
+    if a.scene.starts_with("gen:") { format!("{}:{}", a.scene, fastrand::u64(..)) } else { a.scene.to_string() }
+}
+
+/// The arena whose map `scene` is (generated maps carry a seed after the kit).
+pub fn for_map(scene: &str) -> Option<&'static ArenaDef> {
+    ARENAS.iter().find(|a| scene == a.scene || scene.strip_prefix(a.scene).is_some_and(|rest| rest.starts_with(':')))
 }
 
 /// The first arena is always open; every other one opens when the one before was survived.
