@@ -3,6 +3,7 @@ use bevy::prelude::*;
 use std::collections::HashMap;
 
 use super::bestiary::{self, EnemyDef};
+use super::flowfield::FlowField;
 use super::player::Hero;
 use super::{config, GameState, Health, Pos, Radius, Run, RunEntity, Vel};
 use crate::character::{attach_parts, CharacterAnim};
@@ -177,6 +178,7 @@ fn chase_and_attack(
     grid: Res<EnemyGrid>,
     ground: Res<Ground>,
     obstacles: Res<Obstacles>,
+    field: Res<FlowField>,
     mut hero: Query<(&Pos, &mut Health), (With<Hero>, Without<Enemy>)>,
     mut enemies: Query<(Entity, &mut Pos, &mut Vel, &Radius, &mut Enemy, &mut CharacterAnim), Without<Hero>>,
 ) {
@@ -215,7 +217,9 @@ fn chase_and_attack(
                 *anim = CharacterAnim::once(def.attack);
             }
         } else {
-            vel.0 = to_hero / dist.max(0.001) * enemy.speed;
+            // Close to the hero walk straight at him; further out follow the flow field around obstacles.
+            let dir = if dist < 3.0 { None } else { field.direction(pos.0) };
+            vel.0 = dir.unwrap_or(to_hero / dist.max(0.001)) * enemy.speed;
             if enemy.attack_timer < config::ATTACK_COOLDOWN - 1.0 && anim.clip != def.run {
                 *anim = CharacterAnim { speed: def.run_speed, ..CharacterAnim::looping(def.run) };
             }

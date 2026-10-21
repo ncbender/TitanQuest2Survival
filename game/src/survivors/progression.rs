@@ -37,6 +37,11 @@ impl Upgrade {
         Upgrade::Nova,
     ];
 
+    /// Lower-case variant name, e.g. "multishot" (used by test hooks).
+    pub fn from_name(name: &str) -> Option<Upgrade> {
+        Upgrade::ALL.into_iter().find(|u| format!("{u:?}").eq_ignore_ascii_case(name))
+    }
+
     pub fn title(self, stats: &HeroStats) -> String {
         match self {
             Upgrade::Damage => "Kraft des Titanen: +20 % Schaden".into(),

@@ -4,7 +4,9 @@ use bevy::prelude::*;
 use super::player::{Hero, HeroStats};
 use super::progression::Offer;
 use super::{GameState, Health, Run};
+use super::combat::Hit;
 use crate::fonts::TitleFont;
+use crate::ground::Ground;
 use crate::survivors::enemies::Enemy;
 
 /// Root of the always-on HUD (hidden in the main menu).
@@ -27,7 +29,7 @@ struct EndPanel;
 pub fn plugin(app: &mut App) {
     app.init_resource::<ClickedChoice>()
         .add_systems(Startup, spawn_hud)
-        .add_systems(Update, (update_hud, hud_visibility))
+        .add_systems(Update, (update_hud, hud_visibility, spawn_damage_numbers, float_damage_numbers))
         .add_systems(OnEnter(GameState::LevelUp), show_level_up)
         .add_systems(OnExit(GameState::LevelUp), despawn::<LevelUpPanel>)
         .add_systems(Update, choose_upgrade.run_if(in_state(GameState::LevelUp)))
@@ -85,6 +87,60 @@ Boss: {} {:.0} %", e.def.name, hp.hp / hp.max * 100.0))
             run.kills,
             enemies.iter().count()
         );
+    }
+}
+
+/// Floating number for one hit, anchored at a world position.
+#[derive(Component)]
+struct DamageNumber {
+    world: Vec3,
+    age: f32,
+}
+
+const MAX_DAMAGE_NUMBERS: usize = 60;
+
+fn spawn_damage_numbers(
+    mut commands: Commands,
+    mut hits: MessageReader<Hit>,
+    ground: Res<Ground>,
+    existing: Query<(), With<DamageNumber>>,
+) {
+    let mut count = existing.iter().count();
+    for hit in hits.read() {
+        if count >= MAX_DAMAGE_NUMBERS {
+            continue;
+        }
+        count += 1;
+        let jitter = Vec3::new(fastrand::f32() - 0.5, 0.0, fastrand::f32() - 0.5) * 0.6;
+        commands.spawn((
+            DamageNumber { world: Vec3::new(hit.at.x, ground.stand(hit.at) + 2.2, hit.at.y) + jitter, age: 0.0 },
+            Text::new(format!("{:.0}", hit.amount)),
+            TextFont { font_size: FontSize::Px(if hit.crit { 28.0 } else { 20.0 }), ..default() },
+            TextColor(if hit.crit { Color::srgb(1.0, 0.8, 0.2) } else { Color::WHITE }),
+            Node { position_type: PositionType::Absolute, ..default() },
+        ));
+    }
+}
+
+fn float_damage_numbers(
+    mut commands: Commands,
+    time: Res<Time>,
+    camera: Query<(&Camera, &GlobalTransform)>,
+    mut numbers: Query<(Entity, &mut DamageNumber, &mut Node, &mut TextColor)>,
+) {
+    let Ok((camera, cam_transform)) = camera.single() else { return };
+    for (e, mut n, mut node, mut color) in &mut numbers {
+        n.age += time.delta_secs();
+        if n.age > 0.7 {
+            commands.entity(e).despawn();
+            continue;
+        }
+        let world = n.world + Vec3::Y * n.age * 1.5;
+        if let Ok(screen) = camera.world_to_viewport(cam_transform, world) {
+            node.left = Val::Px(screen.x - 10.0);
+            node.top = Val::Px(screen.y - 10.0);
+        }
+        color.0.set_alpha(1.0 - (n.age / 0.7).powi(2));
     }
 }
 

@@ -6,6 +6,7 @@ mod bestiary;
 mod camera;
 mod combat;
 mod enemies;
+mod flowfield;
 mod hud;
 mod menu;
 mod player;
@@ -118,7 +119,7 @@ impl Plugin for SurvivorsPlugin {
             .init_resource::<Run>()
             .add_message::<StartRun>()
             .add_plugins((camera::plugin, player::plugin, enemies::plugin, combat::plugin, progression::plugin, hud::plugin))
-            .add_plugins((menu::plugin, bench::plugin))
+            .add_plugins((menu::plugin, bench::plugin, flowfield::plugin))
             .add_systems(Startup, skip_menu_in_tests)
             .add_systems(OnEnter(GameState::MainMenu), clear_run)
             .add_systems(Update, (start_run, follow_ground, restart).chain());
@@ -152,12 +153,20 @@ fn start_run(
     }
     *run = Run { level: 1, xp_next: progression::xp_for_level(1), ..default() };
     *stats = player::HeroStats::default();
-    if std::env::var_os("TQ2_TEST_NOVA").is_some() {
-        stats.nova_level = 1; // test hook: Nova from the start
-    }
     enemies::reset(&mut commands);
     combat::reset(&mut commands);
-    player::spawn_hero(&mut commands, arena.start);
+    let hero = player::spawn_hero(&mut commands, arena.start);
+    // Test hook: TQ2_TEST_UPGRADES=multishot,multishot,nova applies upgrades at the start.
+    if let Ok(list) = std::env::var("TQ2_TEST_UPGRADES") {
+        let mut hp = Health { hp: config::PLAYER_HP, max: config::PLAYER_HP };
+        for name in list.split(',') {
+            match progression::Upgrade::from_name(name.trim()) {
+                Some(u) => u.apply(&mut stats, &mut hp),
+                None => warn!("unknown upgrade {name}"),
+            }
+        }
+        commands.entity(hero).insert(hp);
+    }
     next.set(GameState::Playing);
 }
 

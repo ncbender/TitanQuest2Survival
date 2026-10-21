@@ -13,6 +13,7 @@ use crate::obstacles::Obstacles;
 pub struct Projectile {
     vel: Vec2,
     damage: f32,
+    crit: bool,
     pierce: u32,
     life: f32,
     hit: Vec<Entity>,
@@ -29,6 +30,18 @@ struct NovaRing {
     radius: f32,
 }
 
+/// A hit to show as a floating damage number.
+#[derive(Message)]
+pub struct Hit {
+    pub at: Vec2,
+    pub amount: f32,
+    pub crit: bool,
+}
+
+/// Fire flash of a Nova pulse (a real light, fading out).
+#[derive(Component)]
+struct NovaFlash(f32);
+
 #[derive(Resource, Default)]
 struct Weapons {
     bolt_timer: f32,
@@ -39,12 +52,15 @@ const BOLT_COOLDOWN: f32 = 0.9;
 const BOLT_DAMAGE: f32 = 10.0;
 const BOLT_SPEED: f32 = 22.0;
 const BOLT_RANGE: f32 = 18.0;
+/// Angle between neighbouring bolts of a multishot (radians, ~11°).
+const BOLT_SPREAD: f32 = 0.2;
 const NOVA_COOLDOWN: f32 = 3.5;
 const NOVA_DAMAGE: f32 = 12.0;
 const NOVA_RADIUS: f32 = 4.0;
 
 pub fn plugin(app: &mut App) {
     app.init_resource::<Weapons>()
+        .add_message::<Hit>()
         .add_systems(
             FixedUpdate,
             (fire_bolts, fire_nova, move_projectiles, kill_dead, check_game_over)
@@ -52,7 +68,7 @@ pub fn plugin(app: &mut App) {
                 .after(super::enemies::EnemySet)
                 .run_if(in_state(GameState::Playing)),
         )
-        .add_systems(Update, (place_projectiles, fade_dying, animate_nova));
+        .add_systems(Update, (place_projectiles, fade_dying, animate_nova, fade_nova_flash));
 }
 
 /// Fresh weapon cooldowns for a new run.
@@ -60,9 +76,10 @@ pub fn reset(commands: &mut Commands) {
     commands.insert_resource(Weapons::default());
 }
 
-fn roll_damage(base: f32, stats: &HeroStats) -> f32 {
-    let crit = if fastrand::f32() < stats.crit { 2.0 } else { 1.0 };
-    base * stats.damage * crit
+/// Damage of one hit and whether it crit.
+fn roll_damage(base: f32, stats: &HeroStats) -> (f32, bool) {
+    let crit = fastrand::f32() < stats.crit;
+    (base * stats.damage * if crit { 2.0 } else { 1.0 }, crit)
 }
 
 fn fire_bolts(
@@ -79,24 +96,25 @@ fn fire_bolts(
     if weapons.bolt_timer > 0.0 {
         return;
     }
-    // Nearest enemies first; one bolt per target, extra bolts fan out if targets run out.
-    let mut targets: Vec<_> = grid.near(hero.0, BOLT_RANGE).map(|(_, p, _)| p).collect();
-    if targets.is_empty() {
+    // Aim at the nearest enemy; extra projectiles fan out evenly around that direction.
+    let Some(target) = grid.near(hero.0, BOLT_RANGE).map(|(_, p, _)| p).min_by(|a, b| {
+        a.distance_squared(hero.0).total_cmp(&b.distance_squared(hero.0))
+    }) else {
         return;
-    }
+    };
     weapons.bolt_timer = BOLT_COOLDOWN * stats.cooldown;
-    targets.sort_by(|a, b| a.distance_squared(hero.0).total_cmp(&b.distance_squared(hero.0)));
+    let aim = (target - hero.0).normalize_or(Vec2::X);
     let scene = assets.load(GltfAssetLabel::Scene(0).from_asset(BOLT));
+    let n = stats.projectiles as f32;
     for i in 0..stats.projectiles {
-        let target = targets[i as usize % targets.len()];
-        let spread = if (i as usize) < targets.len() { 0.0 } else { (i as f32 - 0.5) * 0.25 };
-        let dir = Vec2::from_angle(spread).rotate((target - hero.0).normalize_or(Vec2::X));
+        let dir = Vec2::from_angle((i as f32 - (n - 1.0) / 2.0) * BOLT_SPREAD).rotate(aim);
+        let (damage, crit) = roll_damage(BOLT_DAMAGE, &stats);
         commands.spawn((
-            Projectile { vel: dir * BOLT_SPEED, damage: roll_damage(BOLT_DAMAGE, &stats), pierce: stats.pierce, life: 1.2, hit: vec![] },
+            Projectile { vel: dir * BOLT_SPEED, damage, crit, pierce: stats.pierce, life: 1.2, hit: vec![] },
             RunEntity,
             Pos(hero.0 + dir * 0.6),
             WorldAssetRoot(scene.clone()),
-            Transform::from_scale(Vec3::splat(1.5)),
+            Transform::from_scale(Vec3::splat(2.5)),
         ));
     }
 }
@@ -108,6 +126,8 @@ fn fire_nova(
     stats: Res<HeroStats>,
     mut weapons: ResMut<Weapons>,
     grid: Res<EnemyGrid>,
+    ground: Res<Ground>,
+    mut hits: MessageWriter<Hit>,
     hero: Query<&Pos, With<Hero>>,
     mut enemies: Query<&mut Health, With<Enemy>>,
 ) {
@@ -122,11 +142,22 @@ fn fire_nova(
     weapons.nova_timer = NOVA_COOLDOWN * stats.cooldown / (1.0 + 0.15 * (stats.nova_level - 1) as f32);
     let radius = NOVA_RADIUS * stats.area * (1.0 + 0.1 * stats.nova_level as f32);
     let damage = NOVA_DAMAGE * (1.0 + 0.3 * (stats.nova_level - 1) as f32);
-    for (e, _, _) in grid.near(hero.0, radius) {
+    let mut count = 0;
+    for (e, at, _) in grid.near(hero.0, radius) {
         if let Ok(mut hp) = enemies.get_mut(e) {
-            hp.hp -= roll_damage(damage, &stats);
+            let (amount, crit) = roll_damage(damage, &stats);
+            hp.hp -= amount;
+            hits.write(Hit { at, amount, crit });
+            count += 1;
         }
     }
+    debug!("nova pulse r={radius:.1} dmg={damage:.0}: {count} enemies hit");
+    commands.spawn((
+        NovaFlash(0.0),
+        RunEntity,
+        PointLight { color: Color::srgb(1.0, 0.55, 0.15), intensity: 4.0e6, range: radius * 3.0, ..default() },
+        Transform::from_xyz(hero.0.x, ground.stand(hero.0) + 1.5, hero.0.y),
+    ));
     commands.spawn((
         NovaRing { age: 0.0, radius },
         RunEntity,
@@ -144,6 +175,7 @@ fn move_projectiles(
     obstacles: Res<Obstacles>,
     mut projectiles: Query<(Entity, &mut Pos, &mut Projectile)>,
     mut enemies: Query<&mut Health, With<Enemy>>,
+    mut hit_events: MessageWriter<Hit>,
 ) {
     let dt = time.delta_secs();
     for (e, mut pos, mut p) in &mut projectiles {
@@ -156,6 +188,7 @@ fn move_projectiles(
             for target in hits {
                 if let Ok(mut hp) = enemies.get_mut(target) {
                     hp.hp -= p.damage;
+                    hit_events.write(Hit { at: pos.0, amount: p.damage, crit: p.crit });
                     p.hit.push(target);
                     if p.hit.len() as u32 > p.pierce {
                         done = true;
@@ -225,6 +258,16 @@ fn fade_dying(mut commands: Commands, time: Res<Time>, mut q: Query<(Entity, &mu
         t.translation.y -= 1.5 * time.delta_secs();
         t.rotation *= Quat::from_rotation_x(-1.5 * time.delta_secs()).slerp(Quat::IDENTITY, (d.0 / 0.5).min(1.0));
         if d.0 > 1.2 {
+            commands.entity(e).despawn();
+        }
+    }
+}
+
+fn fade_nova_flash(mut commands: Commands, time: Res<Time>, mut q: Query<(Entity, &mut NovaFlash, &mut PointLight)>) {
+    for (e, mut flash, mut light) in &mut q {
+        flash.0 += time.delta_secs();
+        light.intensity = 4.0e6 * (1.0 - flash.0 / 0.4).max(0.0);
+        if flash.0 > 0.4 {
             commands.entity(e).despawn();
         }
     }

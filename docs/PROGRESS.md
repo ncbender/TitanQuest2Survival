@@ -35,6 +35,10 @@ After merging part skeletons into the body at runtime (`character.rs`, same day)
 Profiling note: with only the body part (`TQ2_BODY_ONLY=1`) 500 Boarmen hit the 120 FPS cap, so
 the extra skeletons of mane/arm-hair parts were the main cost.
 
+- Playtest fixes (2026-10-21): multishot fans out visibly (±11° per extra bolt), floating damage
+  numbers, Nova fire flash (verified: 11–15 enemies hit per pulse with 30 enemies in range),
+  flow-field pathing so enemies walk around rocks/water (unit test + 500 enemies at 79 FPS).
+
 ## Next
 
 1. Performance beyond 500: animation LOD / reduced update rate for distant enemies.
@@ -44,6 +48,14 @@ the extra skeletons of mane/arm-hair parts were the main cost.
 4. Terrain layer blending (weight maps) and a larger land arena (Greece world partition, FastGeo).
 5. Satyr assembly (static-mesh parts on the humanoid rig).
 6. Main menu, settings/save, then two-player co-op.
+
+## Planned features (requested by the user)
+
+- **Visible gear:** equipment found or chosen during a run is shown on the hero (armour parts,
+  weapon). The staff on `HandAttach_R` (2026-10-21) is the first test of this.
+- **Weapon-driven auto-attacks:** the equipped weapon type decides the hero's auto-attack
+  (e.g. staff = bolts, bow = arrows, sword = melee sweep); changing the weapon changes both the
+  mesh in the hand and the attack. Build on `Attachment` + a weapon table like `bestiary.rs`.
 
 ## Blockers / risks
 

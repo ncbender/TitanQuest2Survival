@@ -39,7 +39,7 @@ pub fn plugin(app: &mut App) {
         .add_systems(Update, animate_hero);
 }
 
-pub fn spawn_hero(commands: &mut Commands, at: Vec2) {
+pub fn spawn_hero(commands: &mut Commands, at: Vec2) -> Entity {
     let hero = commands
         .spawn((
             Hero,
@@ -56,6 +56,7 @@ pub fn spawn_hero(commands: &mut Commands, at: Vec2) {
         ))
         .id();
     attach_parts(commands, hero, HERO_PARTS);
+    hero
 }
 
 fn move_hero(
