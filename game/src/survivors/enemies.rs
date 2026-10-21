@@ -246,7 +246,17 @@ fn spawn_waves(
             info!("first elite: {} at {t:.0} s", def.name);
         }
         director.first_elite |= elite;
-        spawn_enemy(&mut commands, def, p, scale, elite, false);
+        let e = spawn_enemy(&mut commands, def, p, scale, elite, false);
+        if elite {
+            // One TQ2-style affix, two after five minutes.
+            let mods = super::elites::EliteMod::roll(if t > 300.0 { 2 } else { 1 });
+            let hp = config::ENEMY_HP * def.hp * scale * 6.0;
+            if mods.contains(&super::elites::EliteMod::Warded) {
+                commands.entity(e).insert(super::elites::Ward::new(hp));
+            }
+            info!("elite {} {:?}", def.name, mods);
+            commands.entity(e).insert(super::elites::Elite(mods));
+        }
         if def.spawn.is_some() {
             audio.play(super::content::sound::SKELETON_RISE, Some(Vec3::new(p.x, ground.stand(p), p.y)), 0.7, 0.3);
         }
@@ -316,11 +326,14 @@ fn chase_and_attack(
     buffs: Res<super::abilities::Buffs>,
     mut mech: ResMut<super::mechanics::Mechanics>,
     mut hero: Query<(&Pos, &mut Health, &Equipment), (With<Hero>, Without<Enemy>)>,
-    mut enemies: Query<(Entity, &mut Pos, &mut Vel, &Radius, &mut Enemy, &mut CharacterAnim, &super::abilities::Ailments, &mut Health), Without<Hero>>,
+    mut enemies: Query<(Entity, &mut Pos, &mut Vel, &Radius, &mut Enemy, &mut CharacterAnim, &super::abilities::Ailments, &mut Health, Option<&super::elites::Elite>), Without<Hero>>,
 ) {
     let Ok((hero_pos, mut hero_hp, gear)) = hero.single_mut() else { return };
     let dt = time.delta_secs();
-    for (e, mut pos, mut vel, radius, mut enemy, mut anim, ail, mut enemy_hp) in &mut enemies {
+    for (e, mut pos, mut vel, radius, mut enemy, mut anim, ail, mut enemy_hp, elite) in &mut enemies {
+        use super::elites::EliteMod;
+        let swift = if elite.is_some_and(|el| el.has(EliteMod::Swift)) { 1.5 } else { 1.0 };
+        let frenzy = if elite.is_some_and(|el| el.has(EliteMod::Frenzied)) { 0.5 } else { 1.0 };
         let def = enemy.def;
         if enemy.spawning > 0.0 {
             enemy.spawning -= dt;
@@ -363,7 +376,7 @@ fn chase_and_attack(
         } else if dist <= reach {
             vel.0 = to_hero.normalize_or_zero() * 0.01; // keep facing the hero
             if enemy.attack_timer <= 0.0 && !ail.stunned() {
-                enemy.attack_timer = config::ATTACK_COOLDOWN;
+                enemy.attack_timer = config::ATTACK_COOLDOWN * frenzy;
                 let taken = enemy.damage * (1.0 - (gear.damage_reduction() + stats.armor + buffs.armor()).min(0.8));
                 hero_hp.hp -= super::mechanics::hurt_hero(taken, &stats, &mut mech);
                 // Retaliation affixes hurt the attacker.
@@ -373,7 +386,7 @@ fn chase_and_attack(
         } else {
             // Close to the hero walk straight at him; further out follow the flow field around obstacles.
             let dir = if dist < 3.0 { None } else { field.as_ref().and_then(|f| f.direction(pos.0)) };
-            vel.0 = dir.unwrap_or(to_hero / dist.max(0.001)) * enemy.speed * ail.speed();
+            vel.0 = dir.unwrap_or(to_hero / dist.max(0.001)) * enemy.speed * ail.speed() * swift;
             if enemy.attack_timer < config::ATTACK_COOLDOWN - 1.0 && anim.clip != def.run {
                 *anim = CharacterAnim { speed: def.run_speed, ..CharacterAnim::looping(def.run) };
             }

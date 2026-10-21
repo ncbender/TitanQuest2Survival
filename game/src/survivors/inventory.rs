@@ -8,7 +8,6 @@ use bevy::prelude::*;
 use bevy::ui_widgets::ScrollArea;
 use bevy::render::render_resource::TextureFormat;
 
-use super::equipment::Item;
 use super::items::{AffixBook, ItemInstance};
 use super::mastery_data::{MasteryBook, GOLD, TEXT};
 use super::menu::{MainMenuUi, Page};
@@ -79,17 +78,8 @@ pub fn plugin(app: &mut App) {
         .add_systems(OnExit(GameState::MainMenu), despawn_preview);
 }
 
-/// The slot an item goes to on right-click.
-fn slot_for(item: Item) -> Slot {
-    match item {
-        Item::Weapon(_) => Slot::Main,
-        Item::Shield(_) | Item::Talisman(_) => Slot::Off,
-        Item::Armor(_) => Slot::Armor,
-    }
-}
-
 fn worn_slot(profile: &Profile, uid: u64) -> Option<Slot> {
-    [(Slot::Main, profile.main), (Slot::Off, profile.off), (Slot::Armor, profile.armor)].into_iter().find(|(_, u)| *u == Some(uid)).map(|(s, _)| s)
+    Slot::ALL.into_iter().find(|s| profile.slot(*s) == Some(uid))
 }
 
 fn apply_actions(mut pending: ResMut<Pending>, mut profile: ResMut<Profile>, mut state: ResMut<InvState>, audio: Res<crate::audio::Audio>) {
@@ -103,7 +93,10 @@ fn apply_actions(mut pending: ResMut<Pending>, mut profile: ResMut<Profile>, mut
                 continue;
             }
             Act::Equip(uid) => match profile.item(uid).and_then(|i| i.item()) {
-                Some(item) => profile.equip(slot_for(item), Some(uid)).map(|_| "Equipped.".into()),
+                Some(item) => {
+                    let slot = Slot::for_item(item, &profile);
+                    profile.equip(slot, Some(uid)).map(|_| "Equipped.".into())
+                }
                 None => Err("Unknown item.".into()),
             },
             Act::Unequip(slot) => profile.equip(slot, None).map(|_| "Taken off.".into()),
@@ -309,15 +302,24 @@ fn character_column(body: &mut ChildSpawnerCommands, cx: &Ctx) {
                     ImageNode::new(preview.0.clone()),
                     Pickable::IGNORE,
                 ));
-                // Slots around it: weapons left and right of the hands, armour at the chest.
+                // Slots around it like TQ2's character screen: helmet, shoulders, arms and main
+                // hand on the left; amulet, chest, legs and off hand on the right; rings below.
                 let worn = |uid: Option<u64>| uid.and_then(|u| profile.item(u));
                 let two_handed = eq.main.two_handed;
                 let main_icon = if two_handed { "t_2-4_slot_2h_staff_" } else { "t_2-3_slot_1h_sword" };
-                for (slot, label, uid, left, top, w, h, empty) in [
-                    (Slot::Main, "Main hand", profile.main, 0.0, 170.0, 76.0, 132.0, main_icon),
-                    (Slot::Off, "Off hand", profile.off, 276.0, 170.0, 76.0, 132.0, "t_2-3_slot_1h_shield"),
-                    (Slot::Armor, "Armour", profile.armor, 276.0, 30.0, 76.0, 96.0, "t_icon_equipment_2-3_chest"),
+                for (slot, label, left, top, w, h, empty) in [
+                    (Slot::Head, "Helmet", 0.0, 16.0, 64.0, 64.0, "t_icon_equipment_2-2_helm"),
+                    (Slot::Shoulders, "Shoulders", 0.0, 104.0, 64.0, 64.0, "t_icon_equipment_2-2_shoulder"),
+                    (Slot::Arms, "Arms", 0.0, 192.0, 64.0, 64.0, "t_icon_equipment_2-2_arms"),
+                    (Slot::Main, "Main hand", 0.0, 280.0, 64.0, 108.0, main_icon),
+                    (Slot::Amulet, "Amulet", 288.0, 16.0, 64.0, 64.0, "t_icon_equipment_2-1_amulett"),
+                    (Slot::Chest, "Chest", 288.0, 104.0, 64.0, 64.0, "t_icon_equipment_2-3_chest"),
+                    (Slot::Legs, "Legs", 288.0, 192.0, 64.0, 64.0, "t_icon_equipment_2-3_pants"),
+                    (Slot::Off, "Off hand", 288.0, 280.0, 64.0, 108.0, "t_2-3_slot_1h_shield"),
+                    (Slot::Ring1, "Ring", 112.0, 340.0, 48.0, 48.0, "t_icon_equipment_1-1_ring"),
+                    (Slot::Ring2, "Ring", 192.0, 340.0, 48.0, 48.0, "t_icon_equipment_1-1_ring"),
                 ] {
+                    let uid = profile.slot(slot);
                     stage.spawn(Node { position_type: PositionType::Absolute, left: Val::Px(left), top: Val::Px(top - 18.0), flex_direction: FlexDirection::Column, align_items: AlignItems::Center, ..default() }).with_children(|s| {
                         s.spawn((Text::new(label), text(13.0), TextColor(TEXT), Pickable::IGNORE));
                         let inst = worn(uid);

@@ -484,6 +484,7 @@ pub fn plugin(app: &mut App) {
             (cast_skills, move_shots, land_strikes, tick_zones, run_rains, run_pets, run_orbs, run_mines, tick_buffs, tick_ailments)
                 .chain()
                 .after(EnemySet)
+                .before(super::elites::absorb)
                 .run_if(in_state(GameState::Playing)),
         )
         .add_systems(Update, place_skill_entities);

@@ -85,4 +85,7 @@ fn gallery(mut commands: Commands, time: Res<Time<Real>>, mut done: Local<bool>,
         let at = hero.0 + Vec2::from_angle(i as f32 * 1.05) * 9.0;
         spawn_enemy(&mut commands, def, at, 1.0, false, false);
     }
+    // And one elite with two affixes (aura and name label).
+    let e = spawn_enemy(&mut commands, &bestiary::BOARMAN, hero.0 + Vec2::new(0.0, 5.0), 1.0, true, false);
+    commands.entity(e).insert(super::elites::Elite(vec![super::elites::EliteMod::Volatile, super::elites::EliteMod::Warded]));
 }

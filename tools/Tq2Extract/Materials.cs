@@ -141,6 +141,9 @@ class MaterialLibrary(DefaultFileProvider provider, string outDir)
         // a layered noise. Render Grim hair as a plain dark colour instead.
         if (chain[^1].Equals("m_human_hair_master", StringComparison.OrdinalIgnoreCase) && def.albedo?.Contains("t_3noise") == true && !Overrides.ContainsKey(name))
             def = def with { albedo = null, color = [0.07f, 0.05f, 0.035f, 1f] };
+        // Cloth simulation proxies (mi_proxy_cloth_*) are collision helpers, never drawn.
+        if (name.StartsWith("mi_proxy_", StringComparison.OrdinalIgnoreCase))
+            def = def with { hidden = true };
         if (Overrides.TryGetValue(name, out var o))
         {
             string? Tex(string? asset) => asset is null or "none" ? null

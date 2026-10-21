@@ -256,10 +256,34 @@ pub const ARCANE_MIRROR: TalismanDef = TalismanDef {
     skill_damage: 0.4,
 };
 
+/// Where an armour piece is worn (index into `Equipment::pieces`).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ArmorSlot {
+    Head = 0,
+    Chest = 1,
+    Shoulders = 2,
+    Arms = 3,
+    Legs = 4,
+}
+
+impl ArmorSlot {
+    pub fn label(self) -> &'static str {
+        match self {
+            ArmorSlot::Head => "Helmet",
+            ArmorSlot::Chest => "Chest armour",
+            ArmorSlot::Shoulders => "Shoulders",
+            ArmorSlot::Arms => "Arms",
+            ArmorSlot::Legs => "Legs",
+        }
+    }
+}
+
+/// An armour piece: one TQ2 mesh on the hero (more TQ2 sets in armory.rs).
 pub struct ArmorDef {
     pub id: &'static str,
     pub name: &'static str,
     pub icon: &'static str,
+    pub slot: ArmorSlot,
     pub parts: &'static [&'static str],
     /// Fraction of enemy damage absorbed.
     pub armor: f32,
@@ -267,31 +291,82 @@ pub struct ArmorDef {
 
 pub const ADVENTURER: ArmorDef = ArmorDef {
     id: "adventurer",
-    name: "Adventurer's Garb",
+    name: "Adventurer's Tunic",
     icon: "t_icon_armor_torso_greek_adventurer_01_battlemage_none",
-    parts: &["hero/sk_male_torso_greek_adventurer_01_animated.glb", "hero/sk_male_leg_greek_adventurer_01_animated.glb"],
+    slot: ArmorSlot::Chest,
+    parts: &["hero/sk_male_torso_greek_adventurer_01_animated.glb"],
+    armor: 0.0,
+};
+
+pub const ADVENTURER_LEGS: ArmorDef = ArmorDef {
+    id: "adventurer_legs",
+    name: "Adventurer's Trousers",
+    icon: "t_icon_armor_leg_greek_adventurer_02_01_battlemage_none",
+    slot: ArmorSlot::Legs,
+    parts: &["hero/sk_male_leg_greek_adventurer_01_animated.glb"],
     armor: 0.0,
 };
 
 pub const SCHOLAR: ArmorDef = ArmorDef {
     id: "scholar",
-    name: "Scholar's Robes",
+    name: "Scholar's Robe",
     icon: "t_icon_armor_torso_greek_scholar_02_01_battlemage_none",
-    parts: &["hero/sk_male_torso_greek_scholar_02_01_animated.glb", "hero/sk_male_leg_greek_scholar_02_01_animated.glb"],
-    armor: 0.12,
+    slot: ArmorSlot::Chest,
+    parts: &["hero/sk_male_torso_greek_scholar_02_01_animated.glb"],
+    armor: 0.04,
+};
+
+pub const SCHOLAR_LEGS: ArmorDef = ArmorDef {
+    id: "scholar_legs",
+    name: "Scholar's Sandals",
+    icon: "t_icon_armor_leg_greek_scholar_02_01_battlemage_none",
+    slot: ArmorSlot::Legs,
+    parts: &["hero/sk_male_leg_greek_scholar_02_01_animated.glb"],
+    armor: 0.02,
 };
 
 pub const RANGER: ArmorDef = ArmorDef {
     id: "ranger",
-    name: "Ranger's Armour",
+    name: "Ranger's Jerkin",
     icon: "t_icon_armor_torso_greek_ranger_02_battlemage_none",
-    parts: &[
-        "hero/sk_male_torso_greek_ranger_02_animated.glb",
-        "hero/sk_male_leg_greek_ranger_02_animated.glb",
-        "hero/sk_male_shoulder_greek_ranger_02_animated.glb",
-    ],
-    armor: 0.25,
+    slot: ArmorSlot::Chest,
+    parts: &["hero/sk_male_torso_greek_ranger_02_animated.glb"],
+    armor: 0.07,
 };
+
+pub const RANGER_LEGS: ArmorDef = ArmorDef {
+    id: "ranger_legs",
+    name: "Ranger's Boots",
+    icon: "t_icon_armor_leg_greek_ranger_02_battlemage_none",
+    slot: ArmorSlot::Legs,
+    parts: &["hero/sk_male_leg_greek_ranger_02_animated.glb"],
+    armor: 0.04,
+};
+
+pub const RANGER_SHOULDERS: ArmorDef = ArmorDef {
+    id: "ranger_shoulders",
+    name: "Ranger's Shoulderguards",
+    icon: "t_icon_armor_shoulder_greek_ranger_02_battlemage_none",
+    slot: ArmorSlot::Shoulders,
+    parts: &["hero/sk_male_shoulder_greek_ranger_02_animated.glb"],
+    armor: 0.03,
+};
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum JewelryKind {
+    Ring,
+    Amulet,
+}
+
+/// A ring (critical chance) or an amulet (health).
+pub struct JewelryDef {
+    pub id: &'static str,
+    pub name: &'static str,
+    pub icon: &'static str,
+    pub kind: JewelryKind,
+    /// Ring: critical chance (0.03 = +3 %); amulet: health.
+    pub value: f32,
+}
 
 // More TQ2 uniques. Stats vary around their weapon class.
 
@@ -532,6 +607,7 @@ pub enum Item {
     Shield(&'static ShieldDef),
     Talisman(&'static TalismanDef),
     Armor(&'static ArmorDef),
+    Jewelry(&'static JewelryDef),
 }
 
 /// Every item in the game.
@@ -544,8 +620,12 @@ pub const ITEMS: &[Item] = &[
     Item::Shield(&AENEAS_SHIELD),
     Item::Talisman(&ARCANE_MIRROR),
     Item::Armor(&ADVENTURER),
+    Item::Armor(&ADVENTURER_LEGS),
     Item::Armor(&SCHOLAR),
+    Item::Armor(&SCHOLAR_LEGS),
     Item::Armor(&RANGER),
+    Item::Armor(&RANGER_LEGS),
+    Item::Armor(&RANGER_SHOULDERS),
     Item::Weapon(&CHROMATIC_STAFF),
     Item::Weapon(&GRACE_OF_EOS),
     Item::Weapon(&HADES_SCEPTER),
@@ -572,6 +652,11 @@ pub const ITEMS: &[Item] = &[
     Item::Talisman(&MOLTEN_ORB),
 ];
 
+/// Every item: the hand-made ones and the generated armour sets and jewelry.
+pub fn all_items() -> impl Iterator<Item = Item> {
+    ITEMS.iter().chain(super::armory::ITEMS).copied()
+}
+
 impl Item {
     pub fn id(self) -> &'static str {
         match self {
@@ -579,6 +664,7 @@ impl Item {
             Item::Shield(s) => s.id,
             Item::Talisman(t) => t.id,
             Item::Armor(a) => a.id,
+            Item::Jewelry(j) => j.id,
         }
     }
 
@@ -590,7 +676,7 @@ impl Item {
             "shield_of_heracles" => "shield_of_aeneas",
             other => other,
         };
-        ITEMS.iter().copied().find(|i| i.id() == id)
+        all_items().find(|i| i.id() == id)
     }
 
     /// TQ2's item icon (below the asset root).
@@ -600,6 +686,7 @@ impl Item {
             Item::Shield(s) => s.icon,
             Item::Talisman(t) => t.icon,
             Item::Armor(a) => a.icon,
+            Item::Jewelry(j) => j.icon,
         };
         format!("items/textures/{name}.png")
     }
@@ -610,6 +697,7 @@ impl Item {
             Item::Shield(s) => s.name,
             Item::Talisman(t) => t.name,
             Item::Armor(a) => a.name,
+            Item::Jewelry(j) => j.name,
         }
     }
 }
@@ -652,18 +740,23 @@ const DUAL_WIELD_COOLDOWN: f32 = 0.7;
 pub struct Equipment {
     pub main: &'static WeaponDef,
     pub off: Option<OffHand>,
-    pub armor: &'static ArmorDef,
+    /// Armour pieces by `ArmorSlot`, with their quality.
+    pub pieces: [Option<(&'static ArmorDef, f32)>; 5],
+    /// Two rings and an amulet, with their quality.
+    pub jewelry: [Option<(&'static JewelryDef, f32)>; 3],
     /// Quality rolls of the worn items (base value multipliers, see items.rs).
     pub main_quality: f32,
     pub off_quality: f32,
-    pub armor_quality: f32,
     /// Sum of the worn items' affixes.
     pub bonus: super::items::Bonus,
 }
 
 impl Default for Equipment {
     fn default() -> Self {
-        Self { main: &STAFF, off: None, armor: &ADVENTURER, main_quality: 1.0, off_quality: 1.0, armor_quality: 1.0, bonus: default() }
+        let mut pieces = [None; 5];
+        pieces[ArmorSlot::Chest as usize] = Some((&ADVENTURER, 1.0));
+        pieces[ArmorSlot::Legs as usize] = Some((&ADVENTURER_LEGS, 1.0));
+        Self { main: &STAFF, off: None, pieces, jewelry: [None; 3], main_quality: 1.0, off_quality: 1.0, bonus: default() }
     }
 }
 
@@ -707,7 +800,8 @@ impl Equipment {
             Some(OffHand::Shield(s)) => s.block * self.off_quality,
             _ => 0.0,
         };
-        (self.armor.armor * self.armor_quality + block + self.bonus.reduction).min(0.75)
+        let armor: f32 = self.pieces.iter().flatten().map(|(a, q)| a.armor * q).sum();
+        (armor + block + self.bonus.reduction).min(0.75)
     }
 
     /// Damage of one weapon hit before damage bonuses: base × quality + flat affix damage.
@@ -723,8 +817,26 @@ impl Equipment {
         }
     }
 
+    /// Puts an armour piece in its slot.
+    pub fn wear(&mut self, piece: &'static ArmorDef, quality: f32) {
+        self.pieces[piece.slot as usize] = Some((piece, quality));
+    }
+
+    /// Critical chance from rings.
+    pub fn jewelry_crit(&self) -> f32 {
+        self.jewelry.iter().flatten().filter(|(j, _)| j.kind == JewelryKind::Ring).map(|(j, q)| j.value * q).sum()
+    }
+
+    /// Health from the amulet.
+    pub fn jewelry_health(&self) -> f32 {
+        self.jewelry.iter().flatten().filter(|(j, _)| j.kind == JewelryKind::Amulet).map(|(j, q)| j.value * q).sum()
+    }
+
     pub fn parts(&self) -> DesiredParts {
-        DesiredParts(HERO_BASE.iter().chain(self.armor.parts).copied().collect())
+        // A helmet replaces the hair.
+        let helmet = self.pieces[ArmorSlot::Head as usize].is_some();
+        let base = HERO_BASE.iter().copied().filter(|p| !(helmet && p.contains("hair")));
+        DesiredParts(base.chain(self.pieces.iter().flatten().flat_map(|(a, _)| a.parts.iter().copied())).collect())
     }
 
     pub fn attachments(&self) -> Attachments {
@@ -829,8 +941,9 @@ mod tests {
 
     #[test]
     fn item_ids_are_unique() {
-        for (i, a) in ITEMS.iter().enumerate() {
-            assert!(ITEMS[i + 1..].iter().all(|b| a.id() != b.id()), "{}", a.id());
+        let all: Vec<Item> = all_items().collect();
+        for (i, a) in all.iter().enumerate() {
+            assert!(all[i + 1..].iter().all(|b| a.id() != b.id()), "{}", a.id());
             assert!(Item::from_id(a.id()).is_some());
         }
     }

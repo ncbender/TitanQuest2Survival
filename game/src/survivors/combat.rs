@@ -74,7 +74,7 @@ pub fn plugin(app: &mut App) {
         .add_message::<Hit>()
         .add_systems(
             FixedUpdate,
-            (auto_attack, move_projectiles, kill_dead, check_game_over)
+            (auto_attack, move_projectiles, super::elites::absorb, kill_dead, check_game_over)
                 .chain()
                 .after(super::enemies::EnemySet)
                 .run_if(in_state(GameState::Playing)),
@@ -253,10 +253,10 @@ fn kill_dead(
     mut mech: ResMut<super::mechanics::Mechanics>,
     mut hero: Query<&mut Health, With<Hero>>,
     hero_positions: Query<&Pos, With<Hero>>,
-    dead: Query<(Entity, &Health, &Pos, &Enemy, &super::Radius), Without<Hero>>,
+    dead: Query<(Entity, &Health, &Pos, &Enemy, &super::Radius, Option<&super::elites::Elite>), Without<Hero>>,
 ) {
     let hero_pos = hero_positions.single().ok().map(|p| p.0);
-    for (e, hp, pos, enemy, radius) in &dead {
+    for (e, hp, pos, enemy, radius, elite) in &dead {
         // Execution: wounded enemies below the threshold die (not bosses).
         let threshold = if enemy.boss { 0.0 } else { hp.max * stats.execute };
         if hp.hp > threshold {
@@ -264,6 +264,9 @@ fn kill_dead(
         }
         run.kills += 1;
         super::mechanics::on_kill(&mut mech, &stats, &mut hero);
+        if let Some(elite) = elite {
+            super::elites::on_death(&mut commands, elite, enemy, pos.0, (1.0 + run.time / 100.0) * arena.0.tier);
+        }
         audio.play(sound::KILL, Some(Vec3::new(pos.0.x, ground.stand(pos.0) + 1.0, pos.0.y)), 0.6, 0.08);
         // Leave the simulation now; the body sinks away in `fade_dying`.
         // Thrown away from the hero; big creatures fly less far.

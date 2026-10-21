@@ -17,7 +17,9 @@ static class Affixes
     static readonly (string slot, string[] tables)[] Slots =
     [
         ("weapon", ["Prefix/weapons/da_at_01_Prefix_Generic_AllWeapons", "Suffix/weapons/da_at_01_Suffix_Generic_AllWeapon"]),
-        ("armor", ["Prefix/Armors/da_at_01_Prefix_Torso", "Suffix/Armors/da_at_01_Suffix_Torso"]),
+        // All armour pieces (helmet, torso, shoulders, arms, legs) and jewelry (rings, amulets).
+        ("armor", ["Prefix/da_at_01_Prefix_Armors", "Suffix/da_at_01_Suffix_Armors"]),
+        ("jewelry", ["Prefix/da_at_01_Prefix_Jewelry", "Suffix/da_at_01_Suffix_Jewelry"]),
         ("offhand", ["Prefix/Offhand/", "Suffix/Offhand/"]),
     ];
 

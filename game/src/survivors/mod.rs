@@ -2,12 +2,14 @@
 //! plane (`Pos`, `Vel`, `Health`…) and runs in `FixedUpdate`; visuals only follow it.
 //! Keeping the simulation separate is what later lets a host run it for two players.
 mod abilities;
+mod armory;
 pub mod arenas;
 mod bench;
 mod bestiary;
 mod camera;
 mod charstats;
 mod combat;
+mod elites;
 mod enemies;
 mod equipment;
 mod flowfield;
@@ -54,7 +56,7 @@ pub mod content {
     /// Export folders whose materials.json the game loads.
     pub const MATERIAL_DIRS: &[&str] = &[
         "hero", "boarman", "spider", "giant_boar", "skeleton", "harpy", "cyclops", "wolf", "scorpion", "giant_bat", "crab", "lion", "crocolisk",
-        "boarman_mage", "lich", "lich_lord", "props", "weapons",
+        "boarman_mage", "lich", "lich_lord", "props", "weapons", "armor",
     ];
 }
 
@@ -145,7 +147,7 @@ impl Plugin for SurvivorsPlugin {
             .add_message::<StartRun>()
             .add_plugins((camera::plugin, player::plugin, enemies::plugin, combat::plugin, progression::plugin, hud::plugin))
             .add_plugins((menu::plugin, bench::plugin, flowfield::plugin, equipment::plugin, profile::plugin))
-            .add_plugins((mastery_data::plugin, abilities::plugin, skilltree::plugin, mechanics::plugin, inventory::plugin))
+            .add_plugins((mastery_data::plugin, abilities::plugin, skilltree::plugin, mechanics::plugin, inventory::plugin, elites::plugin))
             .insert_resource(items::AffixBook::load(&crate::export_root()))
             .add_systems(Update, (ui::scale_to_window, ui::show_scrollbars))
             .insert_resource(crate::character::ClipAllowlist(bestiary::used_clips()))
@@ -228,7 +230,7 @@ fn start_run(
                     gear.off = None;
                     main_set = true;
                 }
-                Some(equipment::Item::Armor(a)) => gear.armor = a,
+                Some(equipment::Item::Armor(a)) => gear.wear(a, 1.0),
                 Some(item) => {
                     if !equipment::OffHand::from_item(item).is_some_and(|o| gear.equip_off(Some(o))) {
                         warn!("{} does not fit the off hand", item.name());

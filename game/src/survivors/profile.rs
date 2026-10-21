@@ -13,7 +13,7 @@ use std::collections::BTreeMap;
 use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
 
-use super::equipment::{Equipment, Item, OffHand, RunLoot, ADVENTURER, WeaponDef};
+use super::equipment::{ArmorSlot, Equipment, Item, JewelryKind, OffHand, RunLoot, WeaponDef, ADVENTURER, ADVENTURER_LEGS};
 use super::items::{AffixBook, ItemInstance};
 use super::{GameState, Run};
 
@@ -38,7 +38,15 @@ pub struct Character {
     /// Worn items (stash ids).
     pub main: Option<u64>,
     pub off: Option<u64>,
+    /// Chest armour (named `armor` in saves from before the other armour slots).
     pub armor: Option<u64>,
+    pub head: Option<u64>,
+    pub shoulders: Option<u64>,
+    pub arms: Option<u64>,
+    pub legs: Option<u64>,
+    pub ring1: Option<u64>,
+    pub ring2: Option<u64>,
+    pub amulet: Option<u64>,
     pub runs: u32,
     pub best_time: f32,
     /// Tiers unlocked with Ichor per mastery (2 = tiers II and III open).
@@ -57,6 +65,13 @@ static NO_CHARACTER: Character = Character {
     main: None,
     off: None,
     armor: None,
+    head: None,
+    shoulders: None,
+    arms: None,
+    legs: None,
+    ring1: None,
+    ring2: None,
+    amulet: None,
     runs: 0,
     best_time: 0.0,
     tiers: BTreeMap::new(),
@@ -71,8 +86,39 @@ impl Character {
         self.passives.get(id).copied().unwrap_or(0)
     }
 
-    fn worn(&self) -> [Option<u64>; 3] {
-        [self.main, self.off, self.armor]
+    fn worn(&self) -> [Option<u64>; 10] {
+        Slot::ALL.map(|s| self.slot(s))
+    }
+
+    /// The item worn in a slot.
+    pub fn slot(&self, slot: Slot) -> Option<u64> {
+        match slot {
+            Slot::Main => self.main,
+            Slot::Off => self.off,
+            Slot::Head => self.head,
+            Slot::Chest => self.armor,
+            Slot::Shoulders => self.shoulders,
+            Slot::Arms => self.arms,
+            Slot::Legs => self.legs,
+            Slot::Ring1 => self.ring1,
+            Slot::Ring2 => self.ring2,
+            Slot::Amulet => self.amulet,
+        }
+    }
+
+    fn slot_mut(&mut self, slot: Slot) -> &mut Option<u64> {
+        match slot {
+            Slot::Main => &mut self.main,
+            Slot::Off => &mut self.off,
+            Slot::Head => &mut self.head,
+            Slot::Chest => &mut self.armor,
+            Slot::Shoulders => &mut self.shoulders,
+            Slot::Arms => &mut self.arms,
+            Slot::Legs => &mut self.legs,
+            Slot::Ring1 => &mut self.ring1,
+            Slot::Ring2 => &mut self.ring2,
+            Slot::Amulet => &mut self.amulet,
+        }
     }
 }
 
@@ -147,9 +193,11 @@ impl Profile {
         let name = NAMES.iter().find(|n| !self.characters.iter().any(|c| c.name == **n)).map_or_else(|| format!("Hero {}", self.characters.len() + 1), |n| n.to_string());
         let w = self.new_uid();
         let a = self.new_uid();
+        let l = self.new_uid();
         self.stash.push(ItemInstance::plain(w, Item::Weapon(weapon)));
         self.stash.push(ItemInstance::plain(a, Item::Armor(&ADVENTURER)));
-        self.characters.push(Character { created: true, name, main: Some(w), armor: Some(a), ..default() });
+        self.stash.push(ItemInstance::plain(l, Item::Armor(&ADVENTURER_LEGS)));
+        self.characters.push(Character { created: true, name, main: Some(w), armor: Some(a), legs: Some(l), ..default() });
         self.active = self.characters.len() - 1;
     }
 
@@ -229,10 +277,18 @@ impl Profile {
             eq.main_quality = inst.effective_quality();
             inst.add_to(&mut eq.bonus, book);
         }
-        if let Some((inst, Item::Armor(a))) = get(self.armor) {
-            eq.armor = a;
-            eq.armor_quality = inst.effective_quality();
-            inst.add_to(&mut eq.bonus, book);
+        eq.pieces = [None; 5];
+        for slot in [Slot::Head, Slot::Chest, Slot::Shoulders, Slot::Arms, Slot::Legs] {
+            if let Some((inst, Item::Armor(a))) = get(self.slot(slot)) {
+                eq.wear(a, inst.effective_quality());
+                inst.add_to(&mut eq.bonus, book);
+            }
+        }
+        for (i, slot) in [Slot::Ring1, Slot::Ring2, Slot::Amulet].into_iter().enumerate() {
+            if let Some((inst, Item::Jewelry(j))) = get(self.slot(slot)) {
+                eq.jewelry[i] = Some((j, inst.effective_quality()));
+                inst.add_to(&mut eq.bonus, book);
+            }
         }
         if let Some((inst, item)) = get(self.off) {
             if eq.equip_off(OffHand::from_item(item)) {
@@ -263,9 +319,9 @@ impl Profile {
         let main_two_handed = |p: &Profile| p.main.and_then(|u| p.item(u)).and_then(|i| i.item()).is_some_and(|i| matches!(i, Item::Weapon(w) if w.two_handed));
         let c: &mut Character = self;
         // Take the item out of whatever slot of this character held it.
-        for s in [&mut c.main, &mut c.off, &mut c.armor] {
-            if uid.is_some() && *s == uid {
-                *s = None;
+        for s in Slot::ALL {
+            if uid.is_some() && c.slot(s) == uid {
+                *c.slot_mut(s) = None;
             }
         }
         match slot {
@@ -281,7 +337,7 @@ impl Profile {
                 }
                 self.off = uid;
             }
-            Slot::Armor => self.armor = uid,
+            other => *self.slot_mut(other) = uid,
         }
         // The main hand must never be empty.
         if self.main.is_none() {
@@ -289,6 +345,27 @@ impl Profile {
             self.main = weapon;
         }
         Ok(())
+    }
+
+    /// Saves from before the separate armour slots: the old outfits (adventurer, scholar,
+    /// ranger) covered the legs too; each hero wearing one gets the matching legs.
+    fn split_outfits(&mut self) {
+        for i in 0..self.characters.len() {
+            let c = &self.characters[i];
+            if c.legs.is_some() {
+                continue;
+            }
+            let Some(base) = c.armor.and_then(|u| self.item(u)).map(|i| i.base.clone()) else { continue };
+            let legs = match base.as_str() {
+                "adventurer" => &ADVENTURER_LEGS,
+                "scholar" => &super::equipment::SCHOLAR_LEGS,
+                "ranger" => &super::equipment::RANGER_LEGS,
+                _ => continue,
+            };
+            let uid = self.new_uid();
+            self.stash.push(ItemInstance::plain(uid, Item::Armor(legs)));
+            self.characters[i].legs = Some(uid);
+        }
     }
 
     /// Converts saves of earlier versions (one hero, items as id strings) to this format.
@@ -337,21 +414,65 @@ impl Profile {
     }
 }
 
-/// Equipment slots of the armoury.
+/// Equipment slots of a hero.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum Slot {
     #[default]
     Main,
     Off,
-    Armor,
+    Head,
+    Chest,
+    Shoulders,
+    Arms,
+    Legs,
+    Ring1,
+    Ring2,
+    Amulet,
 }
 
 impl Slot {
+    pub const ALL: [Slot; 10] = [
+        Slot::Main,
+        Slot::Off,
+        Slot::Head,
+        Slot::Chest,
+        Slot::Shoulders,
+        Slot::Arms,
+        Slot::Legs,
+        Slot::Ring1,
+        Slot::Ring2,
+        Slot::Amulet,
+    ];
+
     pub fn fits(self, item: Item) -> bool {
+        let armor = |want: ArmorSlot| matches!(item, Item::Armor(a) if a.slot == want);
         match self {
             Slot::Main => matches!(item, Item::Weapon(_)),
             Slot::Off => OffHand::from_item(item).is_some(),
-            Slot::Armor => matches!(item, Item::Armor(_)),
+            Slot::Head => armor(ArmorSlot::Head),
+            Slot::Chest => armor(ArmorSlot::Chest),
+            Slot::Shoulders => armor(ArmorSlot::Shoulders),
+            Slot::Arms => armor(ArmorSlot::Arms),
+            Slot::Legs => armor(ArmorSlot::Legs),
+            Slot::Ring1 | Slot::Ring2 => matches!(item, Item::Jewelry(j) if j.kind == JewelryKind::Ring),
+            Slot::Amulet => matches!(item, Item::Jewelry(j) if j.kind == JewelryKind::Amulet),
+        }
+    }
+
+    /// The slot an item goes to by default (rings: the first free ring slot of `c`).
+    pub fn for_item(item: Item, c: &Character) -> Slot {
+        match item {
+            Item::Weapon(_) => Slot::Main,
+            Item::Shield(_) | Item::Talisman(_) => Slot::Off,
+            Item::Armor(a) => match a.slot {
+                ArmorSlot::Head => Slot::Head,
+                ArmorSlot::Chest => Slot::Chest,
+                ArmorSlot::Shoulders => Slot::Shoulders,
+                ArmorSlot::Arms => Slot::Arms,
+                ArmorSlot::Legs => Slot::Legs,
+            },
+            Item::Jewelry(j) if j.kind == JewelryKind::Amulet => Slot::Amulet,
+            Item::Jewelry(_) => if c.ring1.is_some() && c.ring2.is_none() { Slot::Ring2 } else { Slot::Ring1 },
         }
     }
 }
@@ -408,7 +529,10 @@ fn load(path: &std::path::Path) -> Profile {
         }
     });
     match parsed {
-        Ok(profile) => profile,
+        Ok(mut profile) => {
+            profile.split_outfits();
+            profile
+        }
         Err(e) => {
             let backup = path.with_extension("json.bad");
             error!("profile {} is unreadable ({e}); kept as {}", path.display(), backup.display());

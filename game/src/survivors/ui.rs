@@ -190,7 +190,11 @@ pub fn item_card(
         super::equipment::Item::Weapon(_) => "One-handed weapon",
         super::equipment::Item::Shield(_) => "Shield",
         super::equipment::Item::Talisman(_) => "Talisman",
-        super::equipment::Item::Armor(_) => "Armour",
+        super::equipment::Item::Armor(a) => a.slot.label(),
+        super::equipment::Item::Jewelry(j) => match j.kind {
+            super::equipment::JewelryKind::Ring => "Ring",
+            super::equipment::JewelryKind::Amulet => "Amulet",
+        },
     });
     let mut card = parent.spawn((
         Node {

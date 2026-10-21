@@ -238,6 +238,7 @@ fn slot_key(item: Item) -> &'static str {
     match item {
         Item::Weapon(_) => "weapon",
         Item::Armor(_) => "armor",
+        Item::Jewelry(_) => "jewelry",
         Item::Shield(_) | Item::Talisman(_) => "offhand",
     }
 }
@@ -328,6 +329,10 @@ impl ItemInstance {
             Some(Item::Armor(a)) => format!("{:.0} % less damage taken", a.armor * self.effective_quality() * 100.0),
             Some(Item::Shield(s)) => format!("blocks {:.0} % of damage", s.block * self.effective_quality() * 100.0),
             Some(Item::Talisman(t)) => format!("+{:.0} % skill damage", t.skill_damage * self.effective_quality() * 100.0),
+            Some(Item::Jewelry(j)) => match j.kind {
+                super::equipment::JewelryKind::Ring => format!("+{:.1} % critical chance", j.value * self.effective_quality() * 100.0),
+                super::equipment::JewelryKind::Amulet => format!("+{:.0} health", j.value * self.effective_quality()),
+            },
             None => String::new(),
         }
     }
@@ -379,9 +384,18 @@ pub struct Bonus {
     pub retaliation: f32,
 }
 
-/// Rolls a random item (any base) for a chest.
+/// Rolls a random item for a chest: first the kind (weapons 30 %, off-hands 12 %, armour
+/// 43 %, jewelry 15 %), then a base of that kind.
 pub fn roll_loot(uid: u64, luck: f32, book: &AffixBook) -> ItemInstance {
-    let bases = super::equipment::ITEMS;
+    use super::equipment::Item;
+    let roll = fastrand::u32(0..100);
+    let wanted = |i: &Item| match i {
+        Item::Weapon(_) => roll < 30,
+        Item::Shield(_) | Item::Talisman(_) => (30..42).contains(&roll),
+        Item::Armor(_) => (42..85).contains(&roll),
+        Item::Jewelry(_) => roll >= 85,
+    };
+    let bases: Vec<Item> = super::equipment::all_items().filter(wanted).collect();
     let item = bases[fastrand::usize(..bases.len())];
     ItemInstance::roll(uid, item, Rarity::roll(luck), book)
 }
@@ -397,7 +411,8 @@ pub fn apply(eq: &Equipment, stats: &mut super::player::HeroStats, hp: &mut supe
     stats.crit_mult += b.crit_mult;
     stats.ailment += b.ailment;
     stats.retaliation += b.retaliation;
-    hp.max += b.health;
+    stats.crit += eq.jewelry_crit();
+    hp.max += b.health + eq.jewelry_health();
     hp.hp = hp.max;
 }
 
