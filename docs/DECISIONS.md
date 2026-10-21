@@ -13,7 +13,7 @@ CUE4Parse exports skeletal meshes to glTF but animations only to psa/ueanim/usd.
 `Tq2Extract animate` samples each AnimSequence per frame and writes glTF channels,
 using the same axis conversion as CUE4Parse's mesh writer.
 
-## D4 – Engine: Rust + Bevy (recommended, awaiting user confirmation)
+## D4 – Engine: Rust + Bevy (confirmed by user 2026-10-21)
 Evidence: textured, animated TQ2 enemy renders in Bevy 0.20 via plain glTF.
 UE5 would not avoid conversion: cooked TQ2 packages cannot be opened in the UE5
 editor, so the same export → reimport would be needed, plus a ~100 GB engine install

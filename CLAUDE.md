@@ -22,14 +22,15 @@ install; only read it.
 
 - Windows SDK 10.0.26100 + MSVC are required for Rust linking. Build Rust from
   **PowerShell**; Git Bash puts coreutils `link` before MSVC `link.exe`.
-- `cd game; cargo run -- boarman/boarman_brute_animated.glb none_idle`
+- `cd game; cargo run -- boarman/boarman_brute_animated.glb none_idle`  (single model)
+- `cd game; cargo run -- --scene menu2`  (map + Boarman; WASD pan, Q/E rotate, R/F zoom)
 - `TQ2_SCREENSHOT=<png>` makes the viewer save a screenshot after 4 s and exit (use it to verify rendering).
 - Asset pipeline commands: see `docs/ASSET_PIPELINE.md`.
 
 ## Current state
 
 See `docs/PROGRESS.md` for the current milestone, blockers and next tasks.
-Engine choice (Bevy vs UE5) is pending the user's confirmation; see `docs/DECISIONS.md`.
+Engine: Rust + Bevy, confirmed by the user (docs/DECISIONS.md D4).
 
 ## Working rules
 

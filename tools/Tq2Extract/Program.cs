@@ -33,6 +33,10 @@ if (command is "reflect" or "ctor")
 var oodle = Path.Combine(cache, OodleHelper.OodleFileName);
 if (!File.Exists(oodle)) OodleHelper.DownloadOodleDll(ref oodle);
 OodleHelper.Initialize(oodle);
+// Detex decodes BC6H/BC7 textures; CUE4Parse-Conversion ships it as an embedded DLL.
+var detex = Path.Combine(cache, "Detex.dll");
+if (!File.Exists(detex)) await CUE4Parse_Conversion.Textures.BC.DetexHelper.LoadDllAsync(detex);
+CUE4Parse_Conversion.Textures.BC.DetexHelper.Initialize(detex);
 
 var provider = new DefaultFileProvider(GameDir, SearchOption.TopDirectoryOnly, new VersionContainer(EGame.GAME_TitanQuest2));
 var usmap = Path.Combine(cache, "Mappings.usmap");
@@ -67,7 +71,7 @@ switch (command)
         foreach (var arg in args.Skip(2))
         {
             var prefix = arg.TrimEnd('/') + "/";
-            var paths = provider.Files.Keys.Where(k => k.EndsWith(".uasset") &&
+            var paths = provider.Files.Keys.Where(k => (k.EndsWith(".uasset") || k.EndsWith(".umap")) &&
                 (k.Equals(arg, StringComparison.OrdinalIgnoreCase) || k.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)));
             foreach (var path in paths)
             {
@@ -76,7 +80,7 @@ switch (command)
                     // Animations are not exported here: CUE4Parse has no glTF animation
                     // writer, so the "animate" command bakes them into the mesh .glb.
                     foreach (var e in provider.LoadPackage(path).GetExports())
-                        if (e.ExportType is "SkeletalMesh" or "Texture2D" or "StaticMesh")
+                        if (e.ExportType is "SkeletalMesh" or "Texture2D" or "StaticMesh" or "World")
                             session.Add(e);
                 }
                 catch (Exception ex) { Console.WriteLine($"  FAILED {path}: {ex.GetType().Name}: {ex.Message}"); }
@@ -87,6 +91,29 @@ switch (command)
             Console.WriteLine(r.Success
                 ? $"ok   {r.ObjectPath} -> {string.Join(", ", (r.DiskFilePaths ?? []).Select(Path.GetFileName))}"
                 : $"FAIL {r.ObjectPath}: {r.Error?.GetType().Name} {r.Error?.Message}");
+        break;
+    }
+
+    case "scene":
+        // scene <name> <map.umap>
+        await SceneExport.Run(provider, cache, args[1], args[2]);
+        break;
+
+    case "level":
+    {
+        // level <umap or dir> [max]: export-type histogram per map package
+        int max = args.Length > 2 ? int.Parse(args[2]) : 20;
+        var maps = provider.Files.Keys.Where(k => k.EndsWith(".umap") && k.StartsWith(args[1], StringComparison.OrdinalIgnoreCase)).Take(max);
+        foreach (var path in maps)
+        {
+            try
+            {
+                var exports = provider.LoadPackage(path).GetExports().ToList();
+                var hist = exports.GroupBy(e => e.ExportType).OrderByDescending(g => g.Count()).Take(8).Select(g => $"{g.Key}×{g.Count()}");
+                Console.WriteLine($"{Path.GetFileName(path)}: {exports.Count} exports | {string.Join(", ", hist)}");
+            }
+            catch (Exception ex) { Console.WriteLine($"{Path.GetFileName(path)}: FAILED {ex.GetType().Name}: {ex.Message}"); }
+        }
         break;
     }
 
@@ -139,9 +166,11 @@ switch (command)
             }
             catch (Exception ex) { Console.WriteLine($"  FAILED {seq.Name}: {ex.GetType().Name}: {ex.Message}"); }
         }
-        BindMaterialTextures(model, Path.Combine(cache, "export", args[1].Split('/')[0]));
         var outGlb = Path.Combine(cache, "export", args[2]);
         model.SaveGLB(outGlb);
+        var library = new MaterialLibrary(provider, Path.GetDirectoryName(outGlb)!);
+        library.AddFromMeshes([outGlb]);
+        library.Save();
         Console.WriteLine($"wrote {outGlb} with {model.LogicalAnimations.Count} animations");
         break;
     }
@@ -152,54 +181,10 @@ switch (command)
 }
 return 0;
 
-// CUE4Parse writes glTF materials by name only and the parameters to <material>.json.
-// Embed the original TQ2 textures: Albedo -> base color, Normal -> normal,
-// ORM (R=AO, G=roughness, B=metal, same packing as glTF) -> metallicRoughness + occlusion.
-static void BindMaterialTextures(SharpGLTF.Schema2.ModelRoot model, string exportDir)
-{
-    var files = Directory.EnumerateFiles(exportDir, "*.*", SearchOption.AllDirectories)
-        .GroupBy(f => Path.GetFileName(f).ToLowerInvariant()).ToDictionary(g => g.Key, g => g.First());
-    foreach (var mat in model.LogicalMaterials)
-    {
-        if (mat.Name == null || !files.TryGetValue(mat.Name.ToLowerInvariant() + ".json", out var jsonPath)) continue;
-        var json = Newtonsoft.Json.Linq.JObject.Parse(File.ReadAllText(jsonPath));
-        string? Tex(params string[] keys)
-        {
-            foreach (var k in keys)
-            {
-                var name = (string?)json["Textures"]?[k]?["ObjectName"];
-                if (name == null) continue;
-                var file = name.Split('\'')[1].ToLowerInvariant() + ".png";
-                if (files.TryGetValue(file, out var path)) return path;
-            }
-            return null;
-        }
-        var albedo = Tex("Albedo", "PM_Diffuse");
-        var normal = Tex("Normal", "PM_Normals");
-        var orm = Tex("ORM", "PM_SpecularMasks");
-        mat.InitializePBRMetallicRoughness();
-        if (albedo != null) mat.FindChannel("BaseColor")!.Value.SetTexture(0, model.UseImage(new SharpGLTF.Memory.MemoryImage(albedo)));
-        if (normal != null) mat.FindChannel("Normal")!.Value.SetTexture(0, model.UseImage(new SharpGLTF.Memory.MemoryImage(normal)));
-        if (orm != null)
-        {
-            var img = model.UseImage(new SharpGLTF.Memory.MemoryImage(orm));
-            mat.FindChannel("MetallicRoughness")!.Value.SetTexture(0, img);
-            mat.FindChannel("MetallicRoughness")!.Value.SetFactor("MetallicFactor", 1);
-            mat.FindChannel("MetallicRoughness")!.Value.SetFactor("RoughnessFactor", 1);
-            mat.FindChannel("Occlusion")!.Value.SetTexture(0, img);
-        }
-        if ((string?)json["Properties"]?["BasePropertyOverrides"]?["BlendMode"] == "EBlendMode::BLEND_Masked")
-        {
-            mat.Alpha = SharpGLTF.Schema2.AlphaMode.MASK;
-            mat.AlphaCutoff = (float?)json["Properties"]?["BasePropertyOverrides"]?["OpacityMaskClipValue"] ?? 0.333f;
-        }
-        Console.WriteLine($"  material {mat.Name}: albedo={albedo != null} normal={normal != null} orm={orm != null} alpha={mat.Alpha}");
-    }
-}
-
 static void Reflect(string command, string[] names)
 {
-    var asm = Assembly.Load("CUE4Parse-Conversion");
+    var asm = names.Any(n => n.StartsWith("core:")) ? typeof(DefaultFileProvider).Assembly : Assembly.Load("CUE4Parse-Conversion");
+    names = names.Select(n => n.Replace("core:", "")).ToArray();
     if (command == "ctor")
     {
         foreach (var c in asm.GetType(names[0])!.GetConstructors())
@@ -210,7 +195,7 @@ static void Reflect(string command, string[] names)
         }
         return;
     }
-    foreach (var t in asm.GetTypes().Where(t => t.IsPublic && names.Any(a => t.Name == a || (a.EndsWith('.') && t.FullName!.StartsWith("CUE4Parse_Conversion." + a)))))
+    foreach (var t in asm.GetTypes().Where(t => t.IsPublic && names.Any(a => t.Name == a || (a.EndsWith('.') && t.FullName!.Contains(a)))))
     {
         Console.WriteLine($"== {t.FullName}");
         if (t.IsEnum) { Console.WriteLine("  " + string.Join(", ", Enum.GetNames(t))); continue; }

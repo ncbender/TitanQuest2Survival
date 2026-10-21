@@ -9,11 +9,18 @@
 - **Milestone 1 reached:** Bevy viewer renders the textured Boarman Brute playing
   `a_boarman_none_idle_01` (verified by screenshot).
 
+- **Milestone 2 (partial):** `Tq2Extract scene` exports a map as unique meshes + `scene.json`
+  placements (static, instanced, foliage, level instances); `MaterialLibrary` resolves Grim
+  material chains into `materials.json` + shared textures; Bevy applies one shared material per
+  TQ2 material. `l_main_menu_scene_02` (2,905 instances, 187 meshes, 102/104 materials textured)
+  renders with the animated Boarman (screenshot verified). Landscape not exported yet.
+
 ## Next
 
-1. Engine decision confirmation (Bevy recommended, see DECISIONS).
+1. ~~Engine decision~~ Bevy confirmed.
 2. Fix Boarman mouth interior; attach mane/armhair meshes.
-3. Milestone 2: export a TQ2 environment (static meshes / level) and show it with the animated enemy.
+3. Milestone 2: landscape (heightmap + layer weights) so the ground exists; then a land arena
+   (Greece world partition cells use FastGeoContainer, not yet supported).
 4. Understand Satyr assembly (static mesh parts + humanoid rig + archetypes).
 5. Survivors vertical slice: player movement, enemy spawning/chase, auto-attack, XP, level-up choices.
 6. Performance: measure 50 / 100 / 250 animated Boarmen.
