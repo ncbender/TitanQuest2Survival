@@ -17,6 +17,16 @@ pub struct EnemyDef {
     pub radius: f32,
     pub scale: f32,
     pub xp: u32,
+    /// Shoots from a distance instead of only fighting in melee.
+    pub ranged: Option<Ranged>,
+}
+
+/// A ranged attack: keeps `range` metres away and throws a bolt of `element`.
+#[derive(Clone, Copy)]
+pub struct Ranged {
+    pub range: f32,
+    pub speed: f32,
+    pub element: crate::fx::Element,
 }
 
 pub const SPIDER: EnemyDef = EnemyDef {
@@ -32,6 +42,7 @@ pub const SPIDER: EnemyDef = EnemyDef {
     radius: 0.6,
     scale: 1.0,
     xp: 1,
+    ranged: None,
 };
 
 pub const BOARMAN: EnemyDef = EnemyDef {
@@ -51,6 +62,7 @@ pub const BOARMAN: EnemyDef = EnemyDef {
     radius: 0.7,
     scale: 1.0,
     xp: 1,
+    ranged: None,
 };
 
 pub const GIANT_BOAR: EnemyDef = EnemyDef {
@@ -70,6 +82,7 @@ pub const GIANT_BOAR: EnemyDef = EnemyDef {
     radius: 1.1,
     scale: 1.0,
     xp: 3,
+    ranged: None,
 };
 
 pub const SKELETON: EnemyDef = EnemyDef {
@@ -85,6 +98,7 @@ pub const SKELETON: EnemyDef = EnemyDef {
     radius: 0.5,
     scale: 1.0,
     xp: 2,
+    ranged: None,
 };
 
 pub const HARPY: EnemyDef = EnemyDef {
@@ -100,6 +114,7 @@ pub const HARPY: EnemyDef = EnemyDef {
     radius: 0.6,
     scale: 1.0,
     xp: 2,
+    ranged: None,
 };
 
 /// Boss. TQ2 ships no attack clips for Cyclops_01, so it swings with its combat idle.
@@ -120,6 +135,7 @@ pub const CYCLOPS: EnemyDef = EnemyDef {
     radius: 1.8,
     scale: 1.0,
     xp: 50,
+    ranged: None,
 };
 
 pub const WOLF: EnemyDef = EnemyDef {
@@ -135,6 +151,7 @@ pub const WOLF: EnemyDef = EnemyDef {
     radius: 0.6,
     scale: 1.0,
     xp: 1,
+    ranged: None,
 };
 
 pub const SCORPION: EnemyDef = EnemyDef {
@@ -150,6 +167,7 @@ pub const SCORPION: EnemyDef = EnemyDef {
     radius: 0.8,
     scale: 1.0,
     xp: 2,
+    ranged: None,
 };
 
 pub const GIANT_BAT: EnemyDef = EnemyDef {
@@ -165,6 +183,7 @@ pub const GIANT_BAT: EnemyDef = EnemyDef {
     radius: 0.5,
     scale: 1.0,
     xp: 1,
+    ranged: None,
 };
 
 pub const CRAB: EnemyDef = EnemyDef {
@@ -180,6 +199,7 @@ pub const CRAB: EnemyDef = EnemyDef {
     radius: 0.7,
     scale: 1.0,
     xp: 1,
+    ranged: None,
 };
 
 pub const LION: EnemyDef = EnemyDef {
@@ -195,6 +215,7 @@ pub const LION: EnemyDef = EnemyDef {
     radius: 1.0,
     scale: 1.0,
     xp: 3,
+    ranged: None,
 };
 
 pub const CROCOLISK: EnemyDef = EnemyDef {
@@ -210,6 +231,7 @@ pub const CROCOLISK: EnemyDef = EnemyDef {
     radius: 1.1,
     scale: 1.0,
     xp: 3,
+    ranged: None,
 };
 
 pub const BOARMAN_MAGE: EnemyDef = EnemyDef {
@@ -229,6 +251,7 @@ pub const BOARMAN_MAGE: EnemyDef = EnemyDef {
     radius: 0.7,
     scale: 1.0,
     xp: 2,
+    ranged: Some(Ranged { range: 11.0, speed: 11.0, element: crate::fx::Element::Fire }),
 };
 
 pub const LICH: EnemyDef = EnemyDef {
@@ -244,6 +267,7 @@ pub const LICH: EnemyDef = EnemyDef {
     radius: 0.6,
     scale: 1.0,
     xp: 3,
+    ranged: Some(Ranged { range: 13.0, speed: 9.0, element: crate::fx::Element::Spirit }),
 };
 
 /// Boss of the graveyard.
@@ -260,6 +284,7 @@ pub const LICH_LORD: EnemyDef = EnemyDef {
     radius: 1.2,
     scale: 1.6,
     xp: 60,
+    ranged: Some(Ranged { range: 14.0, speed: 10.0, element: crate::fx::Element::Cold }),
 };
 
 /// Boss of the forest: an oversized lion.

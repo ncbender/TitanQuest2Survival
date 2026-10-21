@@ -188,6 +188,10 @@ the extra skeletons of mane/arm-hair parts were the main cost.
   shells, boulders, wrecks and boats on the rim); the menu backdrop is still TQ2's beach scene.
 - End screen: stat tiles (level, kills, time, bosses), rewards with TQ2 icons (points, gold,
   Ichor), treasure with item icons in rarity colours, clickable "Fight again" / "Main menu".
+- Ranged enemies: Boarman Shaman (fire), Lich (spirit) and Lich Lord (cold) keep their
+  distance and throw bolts that only hit the hero (armour, barrier and glancing apply).
+  Verified in a gallery run (log "first ranged attack").
+- Arena strength flattened to ×1.0 / 1.3 / 1.6 / 2.0 (a start staff got 1 kill in 70 s at ×2.5).
 
 ## Blockers / risks
 

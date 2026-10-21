@@ -41,7 +41,7 @@ pub const ARENAS: &[ArenaDef] = &[
         blurb: "Wolves hunt between the trees. Something larger hunts the wolves.",
         roster: &[s(&b::WOLF, 0.0, 4), s(&b::BOARMAN, 0.0, 2), s(&b::BOARMAN_MAGE, 60.0, 2), s(&b::GIANT_BAT, 120.0, 2), s(&b::GIANT_BOAR, 180.0, 1), s(&b::LION, 240.0, 1)],
         boss: &b::NEMEAN_LION,
-        tier: 1.4,
+        tier: 1.3,
         luck: 1.3,
     },
     ArenaDef {
@@ -51,7 +51,7 @@ pub const ARENAS: &[ArenaDef] = &[
         blurb: "The dead do not rest here. Neither will you.",
         roster: &[s(&b::SKELETON, 0.0, 4), s(&b::GIANT_BAT, 0.0, 2), s(&b::SPIDER, 60.0, 2), s(&b::LICH, 150.0, 2), s(&b::WOLF, 240.0, 1)],
         boss: &b::LICH_LORD,
-        tier: 1.9,
+        tier: 1.6,
         luck: 1.7,
     },
     ArenaDef {
@@ -61,7 +61,7 @@ pub const ARENAS: &[ArenaDef] = &[
         blurb: "Scorpions nest in the ruins, crocolisks crawl up from the river.",
         roster: &[s(&b::SCORPION, 0.0, 3), s(&b::CRAB, 0.0, 2), s(&b::HARPY, 60.0, 2), s(&b::BOARMAN_MAGE, 120.0, 2), s(&b::CROCOLISK, 200.0, 1), s(&b::LION, 300.0, 1)],
         boss: &b::ELDER_CROCOLISK,
-        tier: 2.5,
+        tier: 2.0,
         luck: 2.2,
     },
 ];

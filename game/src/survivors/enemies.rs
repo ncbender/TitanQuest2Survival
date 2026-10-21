@@ -67,8 +67,67 @@ pub fn plugin(app: &mut App) {
         .init_resource::<Director>()
         .add_systems(
             FixedUpdate,
-            (rebuild_grid, spawn_waves, chase_and_attack).chain().in_set(EnemySet).run_if(in_state(GameState::Playing)),
-        );
+            (rebuild_grid, spawn_waves, chase_and_attack, move_enemy_shots).chain().in_set(EnemySet).run_if(in_state(GameState::Playing)),
+        )
+        .add_systems(Update, (dress_enemy_shots, place_enemy_shots));
+}
+
+/// A bolt thrown by a ranged enemy; only hits the hero.
+#[derive(Component)]
+pub struct EnemyShot {
+    vel: Vec2,
+    damage: f32,
+    life: f32,
+    element: crate::fx::Element,
+}
+
+/// Seconds between ranged attacks (melee uses `config::ATTACK_COOLDOWN`).
+const RANGED_COOLDOWN: f32 = 2.2;
+
+fn move_enemy_shots(
+    mut commands: Commands,
+    time: Res<Time>,
+    stats: Res<super::player::HeroStats>,
+    buffs: Res<super::abilities::Buffs>,
+    mut mech: ResMut<super::mechanics::Mechanics>,
+    mut hero: Query<(&Pos, &mut Health, &Equipment), With<Hero>>,
+    mut shots: Query<(Entity, &mut Pos, &mut EnemyShot), Without<Hero>>,
+) {
+    let Ok((hero_pos, mut hero_hp, gear)) = hero.single_mut() else { return };
+    let dt = time.delta_secs();
+    for (e, mut pos, mut shot) in &mut shots {
+        pos.0 += shot.vel * dt;
+        shot.life -= dt;
+        if pos.0.distance(hero_pos.0) < 0.8 {
+            let taken = shot.damage * (1.0 - (gear.damage_reduction() + stats.armor + buffs.armor()).min(0.8));
+            hero_hp.hp -= super::mechanics::hurt_hero(taken, &stats, &mut mech);
+            commands.entity(e).despawn();
+        } else if shot.life <= 0.0 {
+            commands.entity(e).despawn();
+        }
+    }
+}
+
+/// Gives new bolts their TQ2 look (fireball flipbook or an element glow).
+fn dress_enemy_shots(mut commands: Commands, fx: Res<crate::fx::Fx>, flipbook: Res<crate::vfx::Flipbook>, shots: Query<(Entity, &EnemyShot), Added<EnemyShot>>) {
+    use crate::fx::{Element, Tex};
+    for (e, shot) in &shots {
+        commands.entity(e).insert((Transform::default(), Visibility::default())).with_children(|p| match shot.element {
+            Element::Fire => {
+                p.spawn(flipbook.fireball(1.0));
+            }
+            el => {
+                p.spawn(fx.glow(Tex::Glow, el, 1.1));
+                p.spawn(fx.glow(Tex::Spark, el, 0.8));
+            }
+        });
+    }
+}
+
+fn place_enemy_shots(ground: Res<Ground>, mut shots: Query<(&Pos, &mut Transform), With<EnemyShot>>) {
+    for (pos, mut t) in &mut shots {
+        t.translation = Vec3::new(pos.0.x, ground.stand(pos.0) + 1.3, pos.0.y);
+    }
 }
 
 /// Fresh wave director for a new run.
@@ -190,6 +249,7 @@ pub fn spawn_enemy(commands: &mut Commands, def: &'static EnemyDef, at: Vec2, sc
 }
 
 fn chase_and_attack(
+    mut commands: Commands,
     time: Res<Time>,
     grid: Res<EnemyGrid>,
     ground: Res<Ground>,
@@ -228,7 +288,22 @@ fn chase_and_attack(
             }
         }
 
-        if dist <= reach {
+        // Ranged enemies stop at a distance and throw bolts at the hero.
+        let shooting = def.ranged.filter(|r| dist > reach && dist <= r.range && !ail.stunned());
+        if let Some(r) = shooting {
+            vel.0 = to_hero.normalize_or_zero() * 0.01;
+            if enemy.attack_timer <= 0.0 {
+                enemy.attack_timer = RANGED_COOLDOWN;
+                let dir = to_hero / dist.max(0.001);
+                commands.spawn((
+                    EnemyShot { vel: dir * r.speed, damage: enemy.damage * 0.8, life: r.range * 1.5 / r.speed, element: r.element },
+                    Pos(pos.0 + dir * radius.0),
+                    super::RunEntity,
+                ));
+                *anim = CharacterAnim::once(def.attack);
+                info_once!("first ranged attack: {}", def.name);
+            }
+        } else if dist <= reach {
             vel.0 = to_hero.normalize_or_zero() * 0.01; // keep facing the hero
             if enemy.attack_timer <= 0.0 && !ail.stunned() {
                 enemy.attack_timer = config::ATTACK_COOLDOWN;
