@@ -95,6 +95,13 @@ switch (command)
         break;
     }
 
+    case "reftex":
+        // reftex <material package>: textures a root material references directly
+        foreach (var m in provider.LoadPackage(args[1]).GetExports().OfType<CUE4Parse.UE4.Assets.Exports.Material.UMaterial>())
+            foreach (var idx in m.ReferencedTextures ?? [])
+                Console.WriteLine($"  {idx.Name}");
+        break;
+
     case "materials":
     {
         // materials <export name>: write materials.json for every mesh of an export

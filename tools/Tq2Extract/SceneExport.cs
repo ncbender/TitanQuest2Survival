@@ -82,6 +82,50 @@ static class SceneExport
         var landscapes = placements.Where(p => meshes[p.Mesh] is not UStaticMesh && meshFiles.ContainsKey(p.Mesh))
             .Select(p => (Path.Combine(outDir, meshFiles[p.Mesh]), ToBevy(p.Ue))).ToList();
         if (landscapes.Count > 0) WriteGround(Path.Combine(outDir, "ground.json"), landscapes);
+
+        var landscapeActors = meshes.Values.Where(m => m is not UStaticMesh).ToList();
+        if (landscapeActors.Count > 0) await WriteTerrain(materials, outDir, landscapeActors, meshFiles.Values.First(f => f.Contains("Landscape")));
+    }
+
+    /// Terrain layer blending: CUE4Parse writes one full-size weight map per landscape layer
+    /// (ll_<layer>.png); terrain_layers.json names the TQ2 ground textures for each layer.
+    /// Writes terrain/*.png and terrain.json { material, tiling, layers[{name, weight, albedo, normal}] }.
+    static async Task WriteTerrain(MaterialLibrary materials, string outDir, List<UObject> landscapes, string landscapeGlb)
+    {
+        var raw = Path.Combine(outDir, "raw_terrain");
+        var session = new ExportSession(null!);
+        foreach (var l in landscapes) session.Add(l);
+        await session.RunAsync(raw, new ExportOptions(EMeshFormat.Gltf2, exportMorphTargets: false), null!, CancellationToken.None);
+
+        var mapping = JsonConvert.DeserializeObject<Dictionary<string, string?>>(
+            File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "terrain_layers.json")))!;
+        Directory.CreateDirectory(Path.Combine(outDir, "terrain"));
+        var layers = new List<object>();
+        foreach (var weight in Directory.EnumerateFiles(raw, "ll_*.png", SearchOption.AllDirectories).OrderBy(f => f))
+        {
+            var layer = Path.GetFileNameWithoutExtension(weight)[3..];
+            if (!mapping.TryGetValue(layer, out var set))
+            {
+                Console.WriteLine($"  terrain layer {layer}: not in terrain_layers.json, skipped");
+                continue;
+            }
+            if (set == null) continue; // blend modifier without textures
+            var albedo = materials.ExportByName(set + "_a") ?? materials.ExportByName(set + "_albedo");
+            var normal = materials.ExportByName(set + "_n") ?? materials.ExportByName(set + "b_n");
+            if (albedo == null)
+            {
+                Console.WriteLine($"  terrain layer {layer}: no albedo for {set}, skipped");
+                continue;
+            }
+            var rel = $"terrain/ll_{layer}.png";
+            File.Copy(weight, Path.Combine(outDir, rel), true);
+            layers.Add(new { name = layer, weight = rel, albedo, normal });
+        }
+        Directory.Delete(raw, true);
+        var material = ModelRoot.Load(Path.Combine(outDir, landscapeGlb)).LogicalMaterials.FirstOrDefault()?.Name;
+        // UE landscape materials tile ground textures every few metres; 1 repeat per 4 m.
+        File.WriteAllText(Path.Combine(outDir, "terrain.json"), JsonConvert.SerializeObject(new { material, tiling = 0.25f, layers }, Formatting.Indented));
+        Console.WriteLine($"wrote terrain.json: {layers.Count} textured layers for material {material}");
     }
 
     // UE-space matrix -> the same transform in Bevy space (what the game applies to the glb).

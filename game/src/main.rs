@@ -15,6 +15,7 @@ mod fonts;
 mod ground;
 mod obstacles;
 mod survivors;
+mod terrain;
 mod tq2_materials;
 mod tq2_scene;
 
@@ -46,6 +47,7 @@ fn main() {
     .add_plugins((tq2_materials::Tq2MaterialsPlugin, character::CharacterPlugin, audio::AudioPlugin))
     .add_systems(Update, auto_screenshot);
 
+    app.add_plugins(terrain::TerrainPlugin { export_root: EXPORT_ROOT.into(), scene: scene.clone() });
     fonts::install(&mut app, EXPORT_ROOT);
     load_world(&mut app, &scene);
     app.add_plugins(SurvivorsPlugin).run();

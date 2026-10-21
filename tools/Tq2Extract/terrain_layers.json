@@ -1,0 +1,16 @@
+{
+  "_comment": "Landscape layer -> TQ2 ground texture set (base name without _a/_n/_orm). TQ2 wires these inside m_terrain_weight_blend_01a's shader graph, so the mapping is curated by name. Layers mapped to null are blend modifiers (puddles, wetness) without their own textures.",
+  "sand_fine": "t_sand_beach_fine_01a",
+  "ocean_shore": "t_sand_beach_02a",
+  "beach_pebbles": "t_pebbles_beach_01a",
+  "beach_pebbles_sand": "t_sand_beach_pebbles_01a",
+  "sea_shells": "t_sea_shells_01a",
+  "mainmenu_gravel": "t_soil_gravel_01",
+  "mainmenu_rocky_soil": "t_soil_rocky_01",
+  "mainmenu_soil": "t_soil_hardened_01",
+  "cobble_large": "t_floor_stones_01a",
+  "rock_surface": "t_rock_ground_cracked_01a",
+  "grass_mix": "t_grass_mixed_01a",
+  "puddle": null,
+  "wetness": null
+}

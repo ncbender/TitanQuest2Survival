@@ -34,10 +34,10 @@ fn spawn_camera(mut commands: Commands) {
         },
     ));
     commands.spawn((
-        DirectionalLight { illuminance: 11000.0, shadow_maps_enabled: true, ..default() },
+        DirectionalLight { illuminance: 7000.0, shadow_maps_enabled: true, ..default() },
         Transform::from_xyz(3.0, 6.0, 4.0).looking_at(Vec3::ZERO, Vec3::Y),
     ));
-    commands.insert_resource(GlobalAmbientLight { brightness: 650.0, ..default() });
+    commands.insert_resource(GlobalAmbientLight { brightness: 450.0, ..default() });
 }
 
 fn follow(

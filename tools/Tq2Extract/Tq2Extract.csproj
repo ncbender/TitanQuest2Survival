@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <None Include="material_overrides.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="terrain_layers.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

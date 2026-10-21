@@ -150,6 +150,10 @@ class MaterialLibrary(DefaultFileProvider provider, string outDir)
         return defs[name] = def;
     }
 
+    /// Exports the texture asset with this name (e.g. "t_sand_beach_02a_a"), if it exists.
+    public string? ExportByName(string assetName) =>
+        Export(packagesByName[assetName].Select(p => provider.LoadPackage(p).GetExports().OfType<UTexture>().FirstOrDefault()).FirstOrDefault(t => t != null));
+
     /// Exports a texture once. Grim packs variants (e.g. 9 skin tones) side by side into one
     /// virtual texture whose UVs cover a single block; only block `slice` is kept.
     string? Export(UTexture? texture, int slice = 0)

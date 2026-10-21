@@ -45,7 +45,8 @@ the extra skeletons of mane/arm-hair parts were the main cost.
 2. ~~More enemy types~~ Spider, Giant Boar, Skeleton (rises from the ground), Harpy, Cyclops boss
    added via `tools/assets.json` + `bestiary.rs`; still no real death animation.
 3. Weapon on the hero (staff), cast animation, TQ2 VFX instead of the temporary Nova torus.
-4. Terrain layer blending (weight maps) and a larger land arena (Greece world partition, FastGeo).
+4. ~~Terrain layer blending~~ done (11 original ground layers); larger land arena (Greece world
+   partition, FastGeo) still open.
 5. Satyr assembly (static-mesh parts on the humanoid rig).
 6. Main menu, settings/save, then two-player co-op.
 

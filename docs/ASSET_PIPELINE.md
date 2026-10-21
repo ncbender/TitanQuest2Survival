@@ -83,6 +83,17 @@ dotnet run --project tools/UsmapDumper -c Release
 - Mane / arm hair are separate skeletal meshes, not yet attached.
 - ACL-compressed animations need `CUE4Parse-Natives.dll` (build from source).
 
+## Terrain layers
+
+CUE4Parse's landscape export writes one full-size weight map per layer (`ll_<layer>.png`,
+same grid as the height field, addressed by the landscape-wide UV_1). The ground textures are
+wired inside `m_terrain_weight_blend_01a`'s shader graph (not parameters), so
+`tools/Tq2Extract/terrain_layers.json` maps layer names to TQ2 texture sets by name; `puddle`
+and `wetness` are modifiers without textures. `scene` writes `terrain/ll_*.png` + `terrain.json`.
+The game (`terrain.rs`, `terrain.wesl`) packs weights into an RGBA array, builds albedo/normal
+arrays with CPU-generated mipmaps and blends them per pixel, tiling every 4 m in world space.
+Bevy 0.20 shaders are WESL (`import bevy_pbr::…`, `@group(constants::MATERIAL_BIND_GROUP)`).
+
 ## Collision
 
 `scene` also writes `colliders.json`: every mesh's original UE simple collision from its
