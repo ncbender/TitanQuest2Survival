@@ -17,6 +17,17 @@ Need dotnet "Install the .NET 10 SDK: https://dotnet.microsoft.com/download"
 # Without Rust the prebuilt game from the GitHub release is used (see README).
 $exe = Join-Path $root "game\target\release\tq2_survivors.exe"
 $prebuilt = -not (Get-Command cargo -ErrorAction SilentlyContinue)
+if (-not $prebuilt) {
+    # Rust on Windows links with Microsoft's link.exe from the Visual Studio Build Tools (C++).
+    $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+    $vc = if (Test-Path $vswhere) { & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath } else { $null }
+    if (-not $vc) {
+        Write-Host "Rust needs the C++ Build Tools (link.exe) to build the game. Install them with:" -ForegroundColor Red
+        Write-Host '  winget install Microsoft.VisualStudio.2022.BuildTools --override "--wait --passive --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"'
+        Write-Host "then run update.ps1 again. Or unpack the prebuilt release zip into this folder (see README)."
+        throw "C++ Build Tools missing"
+    }
+}
 if ($prebuilt -and -not (Test-Path $exe)) {
     throw "Rust is not installed and no prebuilt game found. Unpack the latest release zip into this folder (see README) or install Rust: https://rustup.rs"
 }
