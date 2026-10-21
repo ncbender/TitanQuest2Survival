@@ -29,6 +29,35 @@ pub fn plugin(app: &mut App) {
     app.add_observer(build).add_systems(FixedUpdate, refresh.run_if(in_state(GameState::Playing).and_eager(resource_exists::<FlowField>)));
 }
 
+/// How open the arena is: the free share, and how far free cells are from the nearest blocked
+/// cell (corridors stay near 2–4 m, open fields reach 10 m and more). Used to pick arenas.
+fn log_openness(blocked: &[bool], w: usize, h: usize) {
+    let mut dist = vec![u16::MAX; w * h];
+    let mut queue = VecDeque::new();
+    for (i, b) in blocked.iter().enumerate() {
+        let (x, z) = (i % w, i / w);
+        // The play area's border counts as blocked too.
+        if *b || x == 0 || z == 0 || x == w - 1 || z == h - 1 {
+            dist[i] = 0;
+            queue.push_back(i);
+        }
+    }
+    while let Some(i) = queue.pop_front() {
+        let (x, z) = (i % w, i / w);
+        for (nx, nz) in [(x.wrapping_sub(1), z), (x + 1, z), (x, z.wrapping_sub(1)), (x, z + 1)] {
+            if nx < w && nz < h && dist[nz * w + nx] == u16::MAX {
+                dist[nz * w + nx] = dist[i] + 1;
+                queue.push_back(nz * w + nx);
+            }
+        }
+    }
+    let free: Vec<u16> = dist.iter().copied().filter(|d| *d > 0).collect();
+    let share = free.len() as f32 / (w * h) as f32;
+    let wide = free.iter().filter(|d| **d >= 8).count() as f32 / free.len().max(1) as f32;
+    let max = free.iter().copied().max().unwrap_or(0);
+    info!("openness: {:.0} % free, {:.0} % of it 8+ m from walls, widest {} m", share * 100.0, wide * 100.0, max);
+}
+
 /// Marks every cell a body cannot stand in: deep water or inside an obstacle.
 fn build(_: On<crate::map::MapLoaded>, mut commands: Commands, ground: Res<Ground>, obstacles: Res<Obstacles>) {
     let b = ground.bounds();
@@ -41,6 +70,7 @@ fn build(_: On<crate::map::MapLoaded>, mut commands: Commands, ground: Res<Groun
         }
     }
     info!("flow field {w}x{h}, {} blocked cells", blocked.iter().filter(|b| **b).count());
+    log_openness(&blocked, w, h);
     commands.insert_resource(FlowField { origin: b.min, w, h, blocked, dist: vec![UNREACHED; w * h], timer: 0.0 });
 }
 

@@ -41,6 +41,11 @@ impl Ground {
         Some(Self { origin: Vec2::from_array(f.origin), cell: f.cell, w: f.w, h: f.h, heights, holes, water, limit: None })
     }
 
+    /// A grid from generated heights (no holes, no water).
+    pub fn from_heights(origin: Vec2, cell: f32, w: usize, h: usize, heights: Vec<f32>) -> Self {
+        Self { origin, cell, w, h, holes: vec![false; heights.len()], heights, water: None, limit: None }
+    }
+
     /// A flat fallback when a map has no landscape.
     pub fn flat() -> Self {
         Self { origin: Vec2::splat(-500.0), cell: 1000.0, w: 2, h: 2, heights: vec![0.0; 4], holes: vec![false; 4], water: None, limit: None }
@@ -86,9 +91,16 @@ impl Ground {
         self.heights.iter().copied().fold(f32::MAX, f32::min)
     }
 
-    /// Shallow water is wadeable; deeper water and landscape holes block movement.
+    /// Terrain steeper than about 50° (cliffs, canyon walls).
+    pub fn steep(&self, p: Vec2) -> bool {
+        let dx = self.terrain(p + Vec2::X * 0.5) - self.terrain(p - Vec2::X * 0.5);
+        let dz = self.terrain(p + Vec2::Y * 0.5) - self.terrain(p - Vec2::Y * 0.5);
+        Vec2::new(dx, dz).length() > 1.2
+    }
+
+    /// Shallow water is wadeable; deeper water, landscape holes and cliffs block movement.
     pub fn walkable(&self, p: Vec2) -> bool {
-        !self.hole(p) && self.water.is_none_or(|w| self.terrain(p) > w - 0.5)
+        !self.hole(p) && !self.steep(p) && self.water.is_none_or(|w| self.terrain(p) > w - 0.5)
     }
 
     /// Moves from `from` towards `to`, sliding along the shore instead of entering deep water.
@@ -100,7 +112,7 @@ impl Ground {
     }
 
     pub fn is_land(&self, p: Vec2) -> bool {
-        !self.hole(p) && self.water.is_none_or(|w| self.terrain(p) > w + 0.15)
+        !self.hole(p) && !self.steep(p) && self.water.is_none_or(|w| self.terrain(p) > w + 0.15)
     }
 
     /// World-space (x, z) rectangle units may use: the height grid, cut to `limit`.

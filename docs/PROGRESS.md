@@ -133,6 +133,20 @@ the extra skeletons of mane/arm-hair parts were the main cost.
 - Not yet: real death animations (bodies still tip over and sink), animation LOD for big
   hordes, enemy ranged attacks, untextured spline meshes in the woods.
 
+## Generated arenas (2026-10-21)
+
+- Cut-out regions had holes (TQ2 leaves the landscape out under cliffs and cellars), canyons
+  and narrow passages. Openness measured per map (`openness:` log line from flowfield.rs):
+  village 15 %, graveyard 14 %, forest 31 % of the free area was 8+ m away from obstacles.
+- `mapgen.rs` builds arenas from TQ2 pieces instead (user's choice, D11): a themed kit of TQ2
+  meshes (border, cover, clutter) taken from exported maps with their materials and collision,
+  three TQ2 ground layers blended by generated weight maps, a seeded height field with a free
+  centre and a rim of hills. Woods, Necropolis and Burnt Village use it (`gen:<kit>`).
+  Verified by screenshots (gameplay camera and overview); no holes or creases.
+- Terrain holes in exported maps are marked in ground.json and blocked; cliffs steeper than
+  ~50° are not walkable; every landscape material of a map gets the blended shader.
+- Camera slightly flatter (pitch 0.85 rad, 26 m).
+
 ## Blockers / risks
 
 - Usmap RVA is build-specific: a TQ2 patch requires re-running the dumper with the game open.

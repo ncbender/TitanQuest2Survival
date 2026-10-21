@@ -1,4 +1,4 @@
-//! Arenas: regions of TQ2's world (exported with `Tq2Extract region`) or its menu scenes, each
+//! Arenas: a TQ2 menu scene or arenas generated from TQ2 pieces (mapgen.rs), each
 //! with its own enemy waves and boss. Surviving an arena unlocks the next; later arenas are
 //! tougher and drop better loot.
 use bevy::prelude::*;
@@ -8,7 +8,7 @@ use super::bestiary::{self as b, EnemyDef, Spawn};
 pub struct ArenaDef {
     pub id: &'static str,
     pub name: &'static str,
-    /// Export folder below cache/export.
+    /// Export folder below cache/export, or `gen:<kit>` for an arena built by mapgen.rs.
     pub scene: &'static str,
     pub blurb: &'static str,
     pub roster: &'static [Spawn],
@@ -37,7 +37,7 @@ pub const ARENAS: &[ArenaDef] = &[
     ArenaDef {
         id: "forest",
         name: "Arcadian Woods",
-        scene: "forest",
+        scene: "gen:woods",
         blurb: "Wolves hunt between the trees. Something larger hunts the wolves.",
         roster: &[s(&b::WOLF, 0.0, 4), s(&b::BOARMAN, 0.0, 2), s(&b::BOARMAN_MAGE, 60.0, 2), s(&b::GIANT_BAT, 120.0, 2), s(&b::GIANT_BOAR, 180.0, 1), s(&b::LION, 240.0, 1)],
         boss: &b::NEMEAN_LION,
@@ -47,7 +47,7 @@ pub const ARENAS: &[ArenaDef] = &[
     ArenaDef {
         id: "graveyard",
         name: "Necropolis",
-        scene: "graveyard",
+        scene: "gen:necropolis",
         blurb: "The dead do not rest here. Neither will you.",
         roster: &[s(&b::SKELETON, 0.0, 4), s(&b::GIANT_BAT, 0.0, 2), s(&b::SPIDER, 60.0, 2), s(&b::LICH, 150.0, 2), s(&b::WOLF, 240.0, 1)],
         boss: &b::LICH_LORD,
@@ -57,7 +57,7 @@ pub const ARENAS: &[ArenaDef] = &[
     ArenaDef {
         id: "village",
         name: "Burnt Village",
-        scene: "village",
+        scene: "gen:village",
         blurb: "Scorpions nest in the ruins, crocolisks crawl up from the river.",
         roster: &[s(&b::SCORPION, 0.0, 3), s(&b::CRAB, 0.0, 2), s(&b::HARPY, 60.0, 2), s(&b::BOARMAN_MAGE, 120.0, 2), s(&b::CROCOLISK, 200.0, 1), s(&b::LION, 300.0, 1)],
         boss: &b::ELDER_CROCOLISK,
@@ -70,9 +70,14 @@ pub fn by_id(id: &str) -> &'static ArenaDef {
     ARENAS.iter().find(|a| a.id == id).unwrap_or(&ARENAS[0])
 }
 
-/// Arenas whose map was exported (the others are listed as missing).
+/// Arenas whose map (or, for generated arenas, every source of its kit) was exported.
 pub fn available(a: &ArenaDef) -> bool {
-    std::path::Path::new(&crate::export_root()).join(a.scene).join("scene.json").is_file()
+    let root = crate::export_root();
+    let has = |dir: &str| std::path::Path::new(&root).join(dir).join("scene.json").is_file();
+    match a.scene.strip_prefix("gen:") {
+        Some(id) => crate::mapgen::KITS.iter().find(|k| k.id == id).is_some_and(|k| k.border.iter().chain(k.cover).chain(k.clutter).all(|p| has(p.dir))),
+        None => has(a.scene),
+    }
 }
 
 /// The first arena is always open; every other one opens when the one before was survived.

@@ -70,3 +70,9 @@ execution, shades) now drive small versions of those systems (`mechanics.rs`), w
 of this game (TQ2's balance tables are not readable). A mechanic is inactive until a passive
 grants it.
 
+## D11 – Arenas built from TQ2 pieces (2026-10-21, user's choice)
+Regions cut from the open world were too narrow and had holes. The user asked to build own
+maps from TQ2's assets and chose a generator with themes over a hand editor: kits of TQ2
+meshes and ground textures, placed by a seeded generator for open fields with cover and a
+natural border (`mapgen.rs`). The exported regions stay as the kits' sources.
+

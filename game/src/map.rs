@@ -26,12 +26,31 @@ impl LoadedMap {
 #[derive(Event)]
 pub struct MapLoaded;
 
-/// Replaces the current map with `<export root>/<scene>`.
+/// Replaces the current map with `<export root>/<scene>`, or with a generated arena for
+/// `gen:<kit>[:<seed>]` (mapgen.rs).
 pub fn load(world: &mut World, scene: &str) {
     let root = crate::export_root();
     let old: Vec<Entity> = world.query_filtered::<Entity, With<MapProp>>().iter(world).collect();
     for e in old {
         world.despawn(e);
+    }
+    if let Some(spec) = scene.strip_prefix("gen:") {
+        let mut parts = spec.split(':');
+        let id = parts.next().unwrap_or_default();
+        let seed = parts.next().and_then(|s| s.parse().ok()).unwrap_or_else(|| id.bytes().fold(7u64, |h, b| h.wrapping_mul(31).wrapping_add(b as u64)));
+        let kit = crate::mapgen::KITS.iter().find(|k| k.id == id).unwrap_or(&crate::mapgen::KITS[0]);
+        world.remove_resource::<crate::terrain::Terrain>();
+        let generated = crate::mapgen::build(world, kit, seed);
+        spawn_pit_floor(world, &generated.ground);
+        world.insert_resource(generated.ground);
+        world.insert_resource(generated.obstacles);
+        world.insert_resource(Arena { start: generated.start });
+        world.insert_resource(LoadedMap(scene.into()));
+        if world.get_resource::<SelectedMap>().is_none() {
+            world.insert_resource(SelectedMap(scene.into()));
+        }
+        world.trigger(MapLoaded);
+        return;
     }
     let assets = world.resource::<AssetServer>().clone();
     world.resource_mut::<MaterialLibrary>().load_dir(&root, scene);

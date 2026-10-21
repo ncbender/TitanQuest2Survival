@@ -65,7 +65,20 @@ static class SceneExport
             float px = p.Ue.M41 / 100, py = p.Ue.M42 / 100, m = radius + TerrainMargin;
             return px <= x + m && px + ProxySize >= x - m && py <= y + m && py + ProxySize >= y - m;
         }
-        placements = placements.Where(p => meshes[p.Mesh] is not UStaticMesh ? ProxyNear(p) : Inside(p, 0)).ToList();
+        // Props by their bounds: big rocks and cliffs whose origin lies outside still fill the edge
+        // (TQ2 leaves the landscape out under them).
+        bool PropNear(Placement p)
+        {
+            var bounds = (meshes[p.Mesh] as UStaticMesh)?.GetOrDefault<FBoxSphereBounds>("ExtendedBounds");
+            if (bounds == null) return Inside(p, 0);
+            var c = Vector3.Transform(new Vector3((float)bounds.Origin.X, (float)bounds.Origin.Y, (float)bounds.Origin.Z), p.Ue) / 100;
+            var scale = MathF.Max(new Vector3(p.Ue.M11, p.Ue.M12, p.Ue.M13).Length(), MathF.Max(new Vector3(p.Ue.M21, p.Ue.M22, p.Ue.M23).Length(), new Vector3(p.Ue.M31, p.Ue.M32, p.Ue.M33).Length()));
+            float r = (float)bounds.SphereRadius / 100 * scale;
+            // Origin inside, or a large mesh reaching into the square plus the terrain margin.
+            if (Inside(p, 0)) return true;
+            return r > 8 && Math.Abs(c.X - x) <= radius + TerrainMargin + r && Math.Abs(c.Y - y) <= radius + TerrainMargin + r;
+        }
+        placements = placements.Where(p => meshes[p.Mesh] is not UStaticMesh ? ProxyNear(p) : PropNear(p)).ToList();
         var keep = placements.Select(p => p.Mesh).ToHashSet();
         foreach (var k in meshes.Keys.Where(k => !keep.Contains(k)).ToList()) meshes.Remove(k);
         Console.WriteLine($"region ({x}, {y}) ±{radius} m: {used} cells");
@@ -237,10 +250,12 @@ static class SceneExport
         }
         foreach (var p in proxies) foreach (var b in p.weights.Values) b.Dispose();
         Directory.Delete(raw, true);
-        var material = ModelRoot.Load(parts[0].glb).LogicalMaterials.FirstOrDefault()?.Name;
+        // Proxies of one map can use different landscape material instances; all get blended.
+        var landscapeMaterials = parts.SelectMany(p => ModelRoot.Load(p.glb).LogicalMaterials.Select(m => m.Name)).Distinct().ToList();
+        var material = landscapeMaterials.FirstOrDefault();
         // UE landscape materials tile ground textures every few metres; 1 repeat per 4 m.
         File.WriteAllText(Path.Combine(outDir, "terrain.json"),
-            JsonConvert.SerializeObject(new { material, tiling = 0.25f, bounds = new[] { bx0, bz0, bx0 + w - 1, bz0 + h - 1 }, layers }, Formatting.Indented));
+            JsonConvert.SerializeObject(new { material, materials = landscapeMaterials, tiling = 0.25f, bounds = new[] { bx0, bz0, bx0 + w - 1, bz0 + h - 1 }, layers }, Formatting.Indented));
         Console.WriteLine($"wrote terrain.json: {layers.Count} layers from {proxies.Count} landscape parts, {w}x{h} m");
     }
 

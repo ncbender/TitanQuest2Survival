@@ -8,7 +8,9 @@ player extracts it from their own copy.
 
 - Titan Quest II (Steam) at the default install path
 - .NET 10 SDK, Rust (stable, MSVC toolchain), git
-- Visual Studio 2022+ with the C++ workload and a Windows SDK
+- Build Tools for Visual Studio 2022 (free) with "Desktop development with C++" (MSVC linker +
+  Windows SDK, which Rust uses on Windows to link the .exe; also compiles the C++ animation
+  decoder). The full Visual Studio IDE is not needed; `rustup` offers to install them.
 
 ## Quick start (install and updates)
 

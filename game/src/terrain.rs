@@ -50,6 +50,9 @@ impl MaterialExtension for TerrainExtension {
 #[derive(Deserialize)]
 struct TerrainFile {
     material: String,
+    /// Every landscape material of the map (older exports only have `material`).
+    #[serde(default)]
+    materials: Vec<String>,
     tiling: f32,
     #[serde(default)]
     bounds: Option<[f32; 4]>,
@@ -66,8 +69,8 @@ struct Layer {
 
 /// The blended material and the TQ2 material name of the landscape it replaces.
 #[derive(Resource)]
-struct Terrain {
-    replaces: String,
+pub struct Terrain {
+    replaces: Vec<String>,
     material: Handle<TerrainMaterial>,
 }
 
@@ -99,42 +102,52 @@ fn build_terrain(world: &mut World, dir: &str, file: TerrainFile) {
         error!("terrain: could not read all {n} weight maps");
         return;
     }
-    let (ww, wh) = weight_maps[0].dimensions();
-    let slices = n.div_ceil(4);
-    let mut weights = vec![0u8; (ww * wh * 4) as usize * slices];
-    for (i, map) in weight_maps.iter().enumerate() {
-        let slice = &mut weights[(ww * wh * 4) as usize * (i / 4)..];
-        for (p, v) in map.pixels().enumerate() {
-            slice[p * 4 + i % 4] = v.0[0];
-        }
-    }
-    let albedo: Vec<_> = file.layers.iter().map(|l| load_rgba(&format!("{dir}/{}", l.albedo), [128, 128, 128, 255])).collect();
-    let normal: Vec<_> = file
-        .layers
-        .iter()
-        .map(|l| l.normal.as_ref().map_or_else(|| flat_normal(), |p| load_rgba(&format!("{dir}/{p}"), [128, 128, 255, 255])))
+    let layers: Vec<(image::GrayImage, String, Option<String>)> = weight_maps
+        .into_iter()
+        .zip(&file.layers)
+        .map(|(w, l)| (w, format!("{dir}/{}", l.albedo), l.normal.as_ref().map(|p| format!("{dir}/{p}"))))
         .collect();
-
-    let mut images = world.resource_mut::<Assets<Image>>();
-    let weights = images.add(array_image(ww, wh, slices as u32, weights, 1, TextureFormat::Rgba8Unorm, false));
-    let albedo = images.add(mipmapped_array(&albedo, TextureFormat::Rgba8UnormSrgb));
-    let normals = images.add(mipmapped_array(&normal, TextureFormat::Rgba8Unorm));
-    let material = world.resource_mut::<Assets<TerrainMaterial>>().add(TerrainMaterial {
-        base: StandardMaterial { perceptual_roughness: 0.9, ..default() },
-        extension: TerrainExtension {
-            params: TerrainParams { layer_count: n as u32, tiling: file.tiling, _pad0: 0.0, _pad1: 0.0, bounds: file.bounds.map_or(Vec4::ZERO, Vec4::from_array) },
-            weights,
-            albedo,
-            normals,
-        },
-    });
+    let material = build_material(world, layers, file.tiling, file.bounds.map_or(Vec4::ZERO, Vec4::from_array));
     info!(
         "terrain: {n} layers ({}) blended for {} in {:.1} s",
         file.layers.iter().map(|l| l.name.as_str()).collect::<Vec<_>>().join(", "),
         file.material,
         started.elapsed().as_secs_f32()
     );
-    world.insert_resource(Terrain { replaces: file.material.to_lowercase(), material });
+    let mut replaces: Vec<String> = file.materials.iter().map(|m| m.to_lowercase()).collect();
+    replaces.push(file.material.to_lowercase());
+    world.insert_resource(Terrain { replaces, material });
+}
+
+/// A blended terrain material from weight maps (one per layer, all the same size, covering
+/// `bounds` in world XZ) and each layer's albedo/normal texture files.
+pub fn build_material(world: &mut World, layers: Vec<(image::GrayImage, String, Option<String>)>, tiling: f32, bounds: Vec4) -> Handle<TerrainMaterial> {
+    let n = layers.len();
+    let (ww, wh) = layers[0].0.dimensions();
+    let slices = n.div_ceil(4);
+    let mut weights = vec![0u8; (ww * wh * 4) as usize * slices];
+    for (i, (map, _, _)) in layers.iter().enumerate() {
+        let slice = &mut weights[(ww * wh * 4) as usize * (i / 4)..];
+        for (p, v) in map.pixels().enumerate() {
+            slice[p * 4 + i % 4] = v.0[0];
+        }
+    }
+    let albedo: Vec<_> = layers.iter().map(|(_, a, _)| load_rgba(a, [128, 128, 128, 255])).collect();
+    let normal: Vec<_> = layers.iter().map(|(_, _, n)| n.as_ref().map_or_else(flat_normal, |p| load_rgba(p, [128, 128, 255, 255]))).collect();
+
+    let mut images = world.resource_mut::<Assets<Image>>();
+    let weights = images.add(array_image(ww, wh, slices as u32, weights, 1, TextureFormat::Rgba8Unorm, false));
+    let albedo = images.add(mipmapped_array(&albedo, TextureFormat::Rgba8UnormSrgb));
+    let normals = images.add(mipmapped_array(&normal, TextureFormat::Rgba8Unorm));
+    world.resource_mut::<Assets<TerrainMaterial>>().add(TerrainMaterial {
+        base: StandardMaterial { perceptual_roughness: 0.9, ..default() },
+        extension: TerrainExtension {
+            params: TerrainParams { layer_count: n as u32, tiling, _pad0: 0.0, _pad1: 0.0, bounds },
+            weights,
+            albedo,
+            normals,
+        },
+    })
 }
 
 fn load_gray(path: &str) -> Option<image::GrayImage> {
@@ -181,6 +194,11 @@ fn array_image(w: u32, h: u32, layers: u32, data: Vec<u8>, mips: u32, format: Te
         RenderAssetUsages::RENDER_WORLD,
     );
     image.texture_descriptor.mip_level_count = mips;
+    // A single layer would otherwise be viewed as a plain 2D texture.
+    image.texture_view_descriptor = Some(bevy::render::render_resource::TextureViewDescriptor {
+        dimension: Some(bevy::render::render_resource::TextureViewDimension::D2Array),
+        ..default()
+    });
     let address = if repeat { ImageAddressMode::Repeat } else { ImageAddressMode::ClampToEdge };
     image.sampler = ImageSampler::Descriptor(ImageSamplerDescriptor {
         address_mode_u: address,
@@ -199,7 +217,7 @@ fn swap_landscape_material(
 ) {
     let Some(terrain) = terrain else { return };
     for (e, name) in &meshes {
-        if name.0.to_lowercase() == terrain.replaces {
+        if terrain.replaces.contains(&name.0.to_lowercase()) {
             commands.entity(e).remove::<MeshMaterial3d<StandardMaterial>>().insert(MeshMaterial3d(terrain.material.clone()));
         }
     }

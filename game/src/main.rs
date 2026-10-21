@@ -22,6 +22,7 @@ mod fonts;
 mod fx;
 mod ground;
 mod map;
+mod mapgen;
 mod obstacles;
 mod survivors;
 mod terrain;

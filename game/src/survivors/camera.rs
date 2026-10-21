@@ -29,8 +29,8 @@ fn spawn_camera(mut commands: Commands) {
         CameraRig {
             yaw: 0.6,
             // Test hook: TQ2_PITCH (radians above the horizon) for close-up screenshots.
-            pitch: std::env::var("TQ2_PITCH").ok().and_then(|p| p.parse().ok()).unwrap_or(0.95),
-            distance: env_zoom().unwrap_or(24.0),
+            pitch: std::env::var("TQ2_PITCH").ok().and_then(|p| p.parse().ok()).unwrap_or(0.85),
+            distance: env_zoom().unwrap_or(26.0),
             focus: Vec3::ZERO,
         },
     ));

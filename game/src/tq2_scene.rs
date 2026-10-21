@@ -31,7 +31,7 @@ fn yes() -> bool {
 
 /// One simple-collision shape of a mesh, in mesh space (see `Tq2Extract` SceneExport).
 #[derive(Deserialize)]
-struct Shape {
+pub struct Shape {
     points: Vec<[f32; 3]>,
     radius: f32,
 }
@@ -90,17 +90,31 @@ pub fn spawn_scene(commands: &mut Commands, assets: &AssetServer, export_root: &
     Some(SceneInfo { center: Vec3::new(median(0), median(1), median(2)), water, props, obstacles })
 }
 
-/// Places every collision shape of every colliding instance into the world.
-fn load_obstacles(file: &SceneFile, export_root: &str, dir: &str) -> Obstacles {
-    let mut obstacles = Obstacles::default();
+/// Collision shapes per mesh (keys like "meshes/sm_x.glb") from `<dir>/colliders.json`.
+pub fn colliders(export_root: &str, dir: &str) -> HashMap<String, Vec<Shape>> {
     let path = format!("{export_root}/{dir}/colliders.json");
-    let shapes: HashMap<String, Vec<Shape>> = match std::fs::read_to_string(&path).map(|s| serde_json::from_str(&s)) {
+    match std::fs::read_to_string(&path).map(|s| serde_json::from_str(&s)) {
         Ok(Ok(s)) => s,
         _ => {
             warn!("{path}: no colliders");
-            return obstacles;
+            HashMap::new()
         }
-    };
+    }
+}
+
+/// Adds a placed mesh's collision shapes to the obstacles.
+pub fn add_shapes(obstacles: &mut Obstacles, shapes: &[Shape], transform: &Transform) {
+    let scale = transform.scale.x.abs().max(transform.scale.z.abs());
+    for shape in shapes {
+        let points: Vec<Vec3> = shape.points.iter().map(|p| transform.transform_point(Vec3::from_array(*p))).collect();
+        obstacles.add(&points, shape.radius * scale);
+    }
+}
+
+/// Places every collision shape of every colliding instance into the world.
+fn load_obstacles(file: &SceneFile, export_root: &str, dir: &str) -> Obstacles {
+    let mut obstacles = Obstacles::default();
+    let shapes = colliders(export_root, dir);
     for inst in file.instances.iter().filter(|i| i.c) {
         let Some(mesh_shapes) = shapes.get(&inst.mesh) else { continue };
         let transform = Transform {
@@ -108,12 +122,8 @@ fn load_obstacles(file: &SceneFile, export_root: &str, dir: &str) -> Obstacles {
             rotation: Quat::from_array(inst.r).normalize(),
             scale: Vec3::from_array(inst.s),
         };
-        let scale = inst.s[0].abs().max(inst.s[2].abs());
-        for shape in mesh_shapes {
-            let points: Vec<Vec3> = shape.points.iter().map(|p| transform.transform_point(Vec3::from_array(*p))).collect();
-            obstacles.add(&points, shape.radius * scale);
-        }
+        add_shapes(&mut obstacles, mesh_shapes, &transform);
     }
-    info!("{path}: {} obstacle shapes", obstacles.len());
+    info!("{export_root}/{dir}: {} obstacle shapes", obstacles.len());
     obstacles
 }
