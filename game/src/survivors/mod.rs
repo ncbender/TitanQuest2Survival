@@ -14,6 +14,7 @@ mod progression;
 
 use bevy::prelude::*;
 
+use crate::audio::Audio;
 use crate::ground::Ground;
 
 /// Original TQ2 assets used by the game (paths below cache/export).
@@ -36,6 +37,21 @@ pub mod content {
     /// Forge Call ability ring (TQ2) used as the Nova shockwave; outer radius in metres.
     pub const NOVA_RING: &str = "props/TQ2/Content/TQ2/Character/Abilities/Forge_Call_01/sm_forge_call_ring_outer.glb";
     pub const NOVA_RING_RADIUS: f32 = 0.16;
+
+    /// TQ2 FMOD events (see `tq2_survivors --list-sounds`).
+    pub mod sound {
+        pub const MENU_MUSIC: &str = "event:/music/mus_mainmenu";
+        pub const RUN_MUSIC: &str = "event:/music/mus_combat_generic_01";
+        pub const BOSS_MUSIC: &str = "event:/music/mus_centaur_chapter_bossfight_centaurus";
+        pub const BOLT_HIT: &str = "event:/weapons/hit/sfx_weapon_hit_staff_projectile_fire";
+        pub const NOVA: &str = "event:/abilities/player/masteries/spirit/death_nova/sfx_ability_player_death_nova_commit";
+        pub const KILL: &str = "event:/weapons/hit/sfx_weapon_hit_generic_medium";
+        pub const SHARD: &str = "event:/loot/pickup/misc/sfx_loot_pickup_gold";
+        pub const LEVEL_UP: &str = "event:/ui/menu/mastery_screen/sfx_ui_menu_mastery_screen_ability_level_up_release";
+        pub const PICK: &str = "event:/ui/menu/button/sfx_ui_menu_button_gemstone_release";
+        pub const SKELETON_RISE: &str = "event:/effects/creature/undead/skeleton/sfx_effect_creature_un_skel_spawn";
+        pub const BOSS_ARRIVES: &str = "event:/abilities/boss/centaurus/sfx_ability_boss_centaurus_shockwave_impact";
+    }
 
     /// Export folders whose materials.json the game loads.
     pub const MATERIAL_DIRS: &[&str] = &["hero", "boarman", "spider", "giant_boar", "skeleton", "harpy", "cyclops", "props", "weapons"];
@@ -122,7 +138,7 @@ impl Plugin for SurvivorsPlugin {
             .add_plugins((menu::plugin, bench::plugin, flowfield::plugin))
             .add_systems(Startup, skip_menu_in_tests)
             .add_systems(OnEnter(GameState::MainMenu), clear_run)
-            .add_systems(Update, (start_run, follow_ground, restart).chain());
+            .add_systems(Update, ((start_run, follow_ground, restart).chain(), music));
     }
 }
 
@@ -175,6 +191,16 @@ fn clear_run(mut commands: Commands, entities: Query<Entity, With<RunEntity>>) {
     for e in &entities {
         commands.entity(e).despawn();
     }
+}
+
+/// Menu music in the menus, combat music during a run, boss music while a boss lives.
+fn music(audio: Res<Audio>, state: Res<State<GameState>>, enemies: Query<&enemies::Enemy>) {
+    let track = match state.get() {
+        GameState::MainMenu | GameState::GameOver => content::sound::MENU_MUSIC,
+        _ if enemies.iter().any(|e| e.boss) => content::sound::BOSS_MUSIC,
+        _ => content::sound::RUN_MUSIC,
+    };
+    audio.music(track, 0.6);
 }
 
 /// Places every simulated unit on the terrain and turns it towards where it moves.

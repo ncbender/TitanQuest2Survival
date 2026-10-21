@@ -6,6 +6,8 @@ use super::enemies::{Enemy, EnemyGrid};
 use super::player::{Hero, HeroStats};
 use super::progression::XpShard;
 use super::{GameState, Health, Pos, Run, RunEntity};
+use super::content::sound;
+use crate::audio::Audio;
 use crate::ground::Ground;
 use crate::obstacles::Obstacles;
 
@@ -127,6 +129,7 @@ fn fire_nova(
     mut weapons: ResMut<Weapons>,
     grid: Res<EnemyGrid>,
     ground: Res<Ground>,
+    audio: Res<Audio>,
     mut hits: MessageWriter<Hit>,
     hero: Query<&Pos, With<Hero>>,
     mut enemies: Query<&mut Health, With<Enemy>>,
@@ -152,6 +155,8 @@ fn fire_nova(
         }
     }
     debug!("nova pulse r={radius:.1} dmg={damage:.0}: {count} enemies hit");
+    let at = Vec3::new(hero.0.x, ground.stand(hero.0) + 1.0, hero.0.y);
+    audio.play(sound::NOVA, Some(at), 0.9, 0.2);
     commands.spawn((
         NovaFlash(0.0),
         RunEntity,
@@ -176,6 +181,7 @@ fn move_projectiles(
     mut projectiles: Query<(Entity, &mut Pos, &mut Projectile)>,
     mut enemies: Query<&mut Health, With<Enemy>>,
     mut hit_events: MessageWriter<Hit>,
+    audio: Res<Audio>,
 ) {
     let dt = time.delta_secs();
     for (e, mut pos, mut p) in &mut projectiles {
@@ -189,6 +195,7 @@ fn move_projectiles(
                 if let Ok(mut hp) = enemies.get_mut(target) {
                     hp.hp -= p.damage;
                     hit_events.write(Hit { at: pos.0, amount: p.damage, crit: p.crit });
+                    audio.play(sound::BOLT_HIT, Some(Vec3::new(pos.0.x, ground.stand(pos.0) + 1.0, pos.0.y)), 0.5, 0.07);
                     p.hit.push(target);
                     if p.hit.len() as u32 > p.pierce {
                         done = true;
@@ -207,6 +214,8 @@ fn kill_dead(
     mut commands: Commands,
     assets: Res<AssetServer>,
     mut run: ResMut<Run>,
+    audio: Res<Audio>,
+    ground: Res<Ground>,
     dead: Query<(Entity, &Health, &Pos, &Enemy)>,
 ) {
     for (e, hp, pos, enemy) in &dead {
@@ -214,6 +223,7 @@ fn kill_dead(
             continue;
         }
         run.kills += 1;
+        audio.play(sound::KILL, Some(Vec3::new(pos.0.x, ground.stand(pos.0) + 1.0, pos.0.y)), 0.6, 0.08);
         // Leave the simulation now; the body sinks away in `fade_dying`.
         commands.entity(e).remove::<(Enemy, Health, Pos)>().insert(Dying(0.0));
         let shards = if enemy.boss { 10 } else { 1 };

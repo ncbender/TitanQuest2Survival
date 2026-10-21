@@ -193,6 +193,7 @@ fn choose_upgrade(
     mut stats: ResMut<HeroStats>,
     mut hero: Query<&mut Health, With<Hero>>,
     mut next: ResMut<NextState<GameState>>,
+    audio: Res<crate::audio::Audio>,
 ) {
     let keys_pick = [KeyCode::Digit1, KeyCode::Digit2, KeyCode::Digit3].iter().position(|k| keys.just_pressed(*k));
     let click_pick = clicked.0.take();
@@ -202,6 +203,7 @@ fn choose_upgrade(
     if let Ok(mut hp) = hero.single_mut() {
         choice.apply(&mut stats, &mut hp);
     }
+    audio.play(super::content::sound::PICK, None, 0.9, 0.0);
     info!("picked {choice:?}: projectiles={} nova={} damage={:.2}", stats.projectiles, stats.nova_level, stats.damage);
     next.set(GameState::Playing);
 }

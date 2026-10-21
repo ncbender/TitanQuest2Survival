@@ -20,3 +20,10 @@ editor, so the same export → reimport would be needed, plus a ~100 GB engine i
 and an Epic account. UE5's advantage is closer material fidelity (Grim shaders would
 still need re-authoring). Bevy gives a small standalone exe, full control over many
 enemies, and matches the azeroth-survivors-re reference architecture.
+
+## D5 – Sound through TQ2's own FMOD runtime (2026-10-21)
+TQ2 ships `fmod.dll`/`fmodstudio.dll` (FMOD 2.02.22) and unencrypted `.bank` files (FSB5/Vorbis,
+1,862 events). The game loads both straight from the player's install at runtime (`audio.rs`,
+`libloading`) and plays the original events by path, so nothing is extracted or shipped and
+TQ2's own variations/mixing are kept. Without the DLLs the game runs silently.
+`tq2_survivors --list-sounds` prints every event path.

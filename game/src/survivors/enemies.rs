@@ -7,6 +7,7 @@ use super::flowfield::FlowField;
 use super::player::Hero;
 use super::{config, GameState, Health, Pos, Radius, Run, RunEntity, Vel};
 use crate::character::{attach_parts, CharacterAnim};
+use crate::audio::Audio;
 use crate::ground::Ground;
 use crate::obstacles::Obstacles;
 
@@ -86,6 +87,7 @@ fn spawn_waves(
     ground: Res<Ground>,
     obstacles: Res<Obstacles>,
     mut director: ResMut<Director>,
+    audio: Res<Audio>,
     hero: Query<&Pos, With<Hero>>,
     enemies: Query<(), With<Enemy>>,
 ) {
@@ -104,6 +106,7 @@ fn spawn_waves(
         director.bosses_spawned += 1;
         if let Some(p) = ring_point(&ground, &obstacles, hero.0, bestiary::CYCLOPS.radius) {
             spawn_enemy(&mut commands, &bestiary::CYCLOPS, p, scale, false);
+            audio.play(super::content::sound::BOSS_ARRIVES, None, 1.0, 0.0);
         }
     }
 
@@ -119,6 +122,9 @@ fn spawn_waves(
         // Every 15th spawn after the first minute is an elite.
         let elite = t > 60.0 && (run.kills as usize + alive + i) % 15 == 0;
         spawn_enemy(&mut commands, def, p, scale, elite);
+        if def.spawn.is_some() {
+            audio.play(super::content::sound::SKELETON_RISE, Some(Vec3::new(p.x, ground.stand(p), p.y)), 0.7, 0.3);
+        }
     }
 }
 

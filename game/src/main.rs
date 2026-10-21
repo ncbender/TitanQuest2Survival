@@ -1,6 +1,7 @@
 //! Titan Quest II Survivors.
 //!
 //! usage: tq2_survivors [--scene <export dir>]   (default: menu2)
+//!        tq2_survivors --list-sounds            print TQ2's FMOD event paths
 //! keys: WASD move, Q/E rotate camera, mouse wheel / R-F zoom, 1-3 pick upgrade, R restart
 //! env TQ2_SCREENSHOT=<path>: save a screenshot after TQ2_SCREENSHOT_DELAY s (default 4) and exit
 //! env TQ2_AUTOPLAY=1: the hero runs in circles by itself and picks upgrades (tests, benchmarks)
@@ -8,6 +9,7 @@
 //! env TQ2_TEST_UPGRADES=multishot,nova,…: apply upgrades at the start of a run
 //! env TQ2_TEST_GALLERY=1: spawn one of every enemy type next to the hero
 //! env TQ2_BENCH=<n>: spawn n enemies, measure 10 s of frame times into cache/bench.txt, exit
+mod audio;
 mod character;
 mod fonts;
 mod ground;
@@ -26,6 +28,13 @@ const EXPORT_ROOT: &str = "../cache/export";
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
+    if args.iter().any(|a| a == "--list-sounds") {
+        // Development aid: print every FMOD event path in TQ2's banks.
+        for path in audio::Audio::load().event_paths() {
+            println!("{path}");
+        }
+        return;
+    }
     let scene = args.iter().position(|a| a == "--scene").and_then(|i| args.get(i + 1)).cloned().unwrap_or_else(|| "menu2".into());
 
     let mut app = App::new();
@@ -34,7 +43,7 @@ fn main() {
         file_path: EXPORT_ROOT.into(),
         ..default()
     }))
-    .add_plugins((tq2_materials::Tq2MaterialsPlugin, character::CharacterPlugin))
+    .add_plugins((tq2_materials::Tq2MaterialsPlugin, character::CharacterPlugin, audio::AudioPlugin))
     .add_systems(Update, auto_screenshot);
 
     fonts::install(&mut app, EXPORT_ROOT);

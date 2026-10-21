@@ -3,6 +3,7 @@ use bevy::prelude::*;
 
 use super::player::{Hero, HeroStats};
 use super::{GameState, Health, Pos, Run};
+use crate::audio::Audio;
 use crate::ground::Ground;
 
 /// A dropped XP crystal (TQ2 mystic shards) worth this much XP.
@@ -114,6 +115,7 @@ fn collect_shards(
     stats: Res<HeroStats>,
     mut run: ResMut<Run>,
     mut next: ResMut<NextState<GameState>>,
+    audio: Res<Audio>,
     hero: Query<&Pos, (With<Hero>, Without<XpShard>)>,
     mut shards: Query<(Entity, &mut Pos, &XpShard)>,
 ) {
@@ -125,6 +127,7 @@ fn collect_shards(
         if dist < 0.6 {
             commands.entity(e).despawn();
             run.xp += shard.0;
+            audio.play(super::content::sound::SHARD, None, 0.35, 0.06);
         } else if dist < radius {
             // Magnet: shards fly to the hero, faster the closer they get.
             pos.0 += d / dist * (8.0 + 20.0 * (1.0 - dist / radius)) * time.delta_secs();
@@ -135,6 +138,7 @@ fn collect_shards(
         run.level += 1;
         run.xp_next = xp_for_level(run.level);
         next.set(GameState::LevelUp);
+        audio.play(super::content::sound::LEVEL_UP, None, 0.9, 0.0);
     }
 }
 
