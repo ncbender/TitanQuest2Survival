@@ -16,6 +16,7 @@ mod menu;
 mod player;
 mod profile;
 mod progression;
+mod settings;
 mod skills;
 mod skilltree;
 mod ui;
@@ -136,6 +137,7 @@ impl Plugin for SurvivorsPlugin {
             .add_plugins((mastery_data::plugin, abilities::plugin, skilltree::plugin))
             .insert_resource(items::AffixBook::load(&crate::export_root()))
             .add_systems(Update, ui::scale_to_window)
+            .add_plugins(settings::plugin)
             .add_systems(Startup, skip_menu_in_tests)
             .add_systems(OnEnter(GameState::MainMenu), clear_run)
             .add_systems(Update, ((start_run, follow_ground, restart).chain(), music));

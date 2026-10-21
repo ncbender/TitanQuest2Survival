@@ -7,6 +7,7 @@ use super::equipment::{AttackKind, Item, WEAPONS};
 use super::items::AffixBook;
 use super::mastery_data::{MasteryBook, GOLD, TEXT};
 use super::profile::{Profile, Slot};
+use super::settings::SettingsOpen;
 use super::skilltree::{self, TreeView};
 use super::ui::{self, backdrop, button, panel, text};
 use super::{GameState, StartRun};
@@ -57,6 +58,7 @@ enum MenuAction {
     /// Equip the stash item with this uid in the selected slot.
     Equip(u64),
     EmptyOffHand,
+    Settings,
 }
 
 pub fn plugin(app: &mut App) {
@@ -88,12 +90,16 @@ pub fn plugin(app: &mut App) {
 
 /// The menu opens on the title page; TQ2_MENU=hero/armory/skills/choose/characters opens a page
 /// (screenshots).
-fn open_menu(mut page: ResMut<Page>, mut view: ResMut<TreeView>) {
+fn open_menu(mut page: ResMut<Page>, mut view: ResMut<TreeView>, mut settings_open: ResMut<SettingsOpen>) {
     *page = match std::env::var("TQ2_MENU").as_deref() {
         Ok("hero") => Page::Hero,
         Ok("armory") => Page::Armory,
         Ok("skills") => Page::Skills,
         Ok("characters") => Page::Characters,
+        Ok("settings") => {
+            settings_open.0 = true;
+            Page::Title
+        }
         Ok("choose") => {
             view.chooser = true;
             view.preview = Some(0);
@@ -182,6 +188,7 @@ fn show_page(
                 } else {
                     p.spawn(button(&assets, "New Hero  (Enter)", 380.0, true, true)).observe(click(MenuAction::Open(Page::Hero)));
                 }
+                p.spawn(button(&assets, "Settings  (O)", 380.0, true, false)).observe(click(MenuAction::Settings));
                 p.spawn(button(&assets, "Quit  (Esc)", 380.0, true, false)).observe(click(MenuAction::Quit));
                 p.spawn((Text::new("WASD move · Q/E rotate camera · mouse wheel zoom · 1–3 choose upgrade · Esc pause"), text(16.0)));
             });
@@ -333,16 +340,26 @@ fn main_menu_input(
     mut armed: ResMut<DeleteArmed>,
     mut profile: ResMut<Profile>,
     mut view: ResMut<TreeView>,
+    mut settings_open: ResMut<SettingsOpen>,
     mut start: MessageWriter<StartRun>,
     mut exit: MessageWriter<AppExit>,
 ) {
     let pressed = |k| keys.just_pressed(k);
+    // The settings window takes Esc and blocks the menu behind it.
+    if settings_open.0 {
+        if pressed(KeyCode::Escape) {
+            settings_open.0 = false;
+        }
+        clicked.0 = None;
+        return;
+    }
     let key_action = match *page {
         Page::Title if pressed(KeyCode::Enter) => Some(if profile.created { MenuAction::Start } else { MenuAction::Open(Page::Hero) }),
         Page::Title if pressed(KeyCode::KeyA) && profile.created => Some(MenuAction::Open(Page::Armory)),
         Page::Title if pressed(KeyCode::KeyS) && profile.created => Some(MenuAction::Open(Page::Skills)),
         Page::Title if pressed(KeyCode::KeyC) && profile.created => Some(MenuAction::Open(Page::Characters)),
         Page::Title | Page::Characters if pressed(KeyCode::KeyN) => Some(MenuAction::Open(Page::Hero)),
+        Page::Title if pressed(KeyCode::KeyO) => Some(MenuAction::Settings),
         Page::Title if pressed(KeyCode::Escape) => Some(MenuAction::Quit),
         _ if pressed(KeyCode::Escape) => Some(MenuAction::Back),
         Page::Hero => [KeyCode::Digit1, KeyCode::Digit2, KeyCode::Digit3, KeyCode::Digit4, KeyCode::Digit5]
@@ -403,6 +420,7 @@ fn main_menu_input(
         MenuAction::EmptyOffHand => {
             let _ = profile.equip(Slot::Off, None);
         }
+        MenuAction::Settings => settings_open.0 = true,
     }
 }
 
@@ -424,11 +442,17 @@ fn show_pause(mut commands: Commands, title: Res<TitleFont>) {
         ))
         .with_children(|p| {
             p.spawn((Text::new("Paused"), title.at(48.0)));
-            p.spawn((Text::new("Esc – resume     M – main menu (loot and points are kept)"), text(22.0)));
+            p.spawn((Text::new("Esc – resume     O – settings     M – main menu (loot and points are kept)"), text(22.0)));
         });
 }
 
-fn pause_input(keys: Res<ButtonInput<KeyCode>>, state: Res<State<GameState>>, mut next: ResMut<NextState<GameState>>) {
+fn pause_input(keys: Res<ButtonInput<KeyCode>>, state: Res<State<GameState>>, mut next: ResMut<NextState<GameState>>, mut settings_open: ResMut<SettingsOpen>) {
+    if settings_open.0 && *state.get() == GameState::Paused {
+        if keys.just_pressed(KeyCode::Escape) {
+            settings_open.0 = false;
+        }
+        return;
+    }
     match state.get() {
         GameState::Playing if keys.just_pressed(KeyCode::Escape) => next.set(GameState::Paused),
         GameState::Paused if keys.just_pressed(KeyCode::Escape) => next.set(GameState::Playing),

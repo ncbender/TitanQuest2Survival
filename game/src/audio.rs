@@ -110,7 +110,10 @@ struct Studio {
     events: HashMap<String, Handle>,
     /// When each event last started (for throttling rapid repeats like hits).
     last_played: HashMap<&'static str, std::time::Instant>,
-    music: Option<(&'static str, Handle)>,
+    music: Option<(&'static str, Handle, f32)>,
+    /// Player settings (0..1), multiplied into every event's volume.
+    sfx_volume: f32,
+    music_volume: f32,
 }
 
 // SAFETY: the FMOD Studio API is thread-safe in its default (asynchronous) mode.
@@ -150,7 +153,7 @@ impl Audio {
                     Err(e) => warn!("{e}"),
                 }
             }
-            Ok(Studio { api, system, banks, events: HashMap::new(), last_played: HashMap::new(), music: None })
+            Ok(Studio { api, system, banks, events: HashMap::new(), last_played: HashMap::new(), music: None, sfx_volume: 1.0, music_volume: 1.0 })
         }
     }
 
@@ -177,7 +180,7 @@ impl Audio {
                 };
                 (s.api.set_3d)(inst, &attrs);
             }
-            (s.api.set_volume)(inst, volume);
+            (s.api.set_volume)(inst, volume * s.sfx_volume);
             (s.api.start)(inst);
             (s.api.release)(inst);
         }
@@ -187,19 +190,33 @@ impl Audio {
     pub fn music(&self, event: &'static str, volume: f32) {
         let Some(studio) = &self.0 else { return };
         let mut s = studio.lock().unwrap();
-        if s.music.is_some_and(|(current, _)| current == event) {
+        if s.music.is_some_and(|(current, _, _)| current == event) {
             return;
         }
         // SAFETY: stopping/starting instances created by this system.
         unsafe {
-            if let Some((_, old)) = s.music.take() {
+            if let Some((_, old, _)) = s.music.take() {
                 (s.api.stop)(old, 0); // FMOD_STUDIO_STOP_ALLOWFADEOUT
                 (s.api.release)(old);
             }
             if let Some(inst) = s.instance(event) {
-                (s.api.set_volume)(inst, volume);
+                (s.api.set_volume)(inst, volume * s.music_volume);
                 (s.api.start)(inst);
-                s.music = Some((event, inst));
+                s.music = Some((event, inst, volume));
+            }
+        }
+    }
+
+    /// Player volume settings (0..1); applies to the running music immediately.
+    pub fn set_volumes(&self, sfx: f32, music: f32) {
+        let Some(studio) = &self.0 else { return };
+        let mut s = studio.lock().unwrap();
+        s.sfx_volume = sfx;
+        s.music_volume = music;
+        if let Some((_, inst, base)) = s.music {
+            // SAFETY: the music instance belongs to this system and is still alive.
+            unsafe {
+                (s.api.set_volume)(inst, base * music);
             }
         }
     }

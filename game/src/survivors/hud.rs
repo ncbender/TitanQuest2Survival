@@ -116,8 +116,13 @@ fn spawn_damage_numbers(
     mut commands: Commands,
     mut hits: MessageReader<Hit>,
     ground: Res<Ground>,
+    settings: Res<super::settings::Settings>,
     existing: Query<(), With<DamageNumber>>,
 ) {
+    if !settings.damage_numbers {
+        hits.clear();
+        return;
+    }
     let mut count = existing.iter().count();
     for hit in hits.read() {
         if count >= MAX_DAMAGE_NUMBERS {

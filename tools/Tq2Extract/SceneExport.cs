@@ -19,7 +19,7 @@ using SharpGLTF.Schema2;
 // each mesh's original UE simple collision (boxes, spheres, capsules, convex hulls).
 static class SceneExport
 {
-    record Placement(string Mesh, Matrix4x4 Ue, bool Collides = true);
+    internal record Placement(string Mesh, Matrix4x4 Ue, bool Collides = true);
 
     public static async Task Run(DefaultFileProvider provider, string cache, string name, string mapPath)
     {
@@ -84,13 +84,29 @@ static class SceneExport
         if (landscapes.Count > 0) WriteGround(Path.Combine(outDir, "ground.json"), landscapes);
 
         var landscapeActors = meshes.Values.Where(m => m is not UStaticMesh).ToList();
-        if (landscapeActors.Count > 0) await WriteTerrain(materials, outDir, landscapeActors, meshFiles.Values.First(f => f.Contains("Landscape")));
+        if (landscapeActors.Count > 0) await WriteTerrain(provider, materials, outDir, landscapeActors, meshFiles.Values.First(f => f.Contains("Landscape")));
+    }
+
+    /// TQ2's ground texture sets (Ground/Terrain/Textures/t_<name>_a), for layers not listed in
+    /// terrain_layers.json: the set whose name contains all words of the layer name wins.
+    static string? GuessTerrainSet(DefaultFileProvider provider, string layer)
+    {
+        var sets = provider.Files.Keys
+            .Where(k => k.Contains("/Ground/Terrain/Textures/", StringComparison.OrdinalIgnoreCase) && k.EndsWith("_a.uasset"))
+            .Select(k => Path.GetFileNameWithoutExtension(k)[..^2])
+            .Distinct()
+            .ToList();
+        var words = layer.ToLowerInvariant().Split('_', StringSplitOptions.RemoveEmptyEntries).Where(w => w.Length > 2).ToArray();
+        var best = sets.Where(s => words.All(w => s.Contains(w))).OrderBy(s => s.Length).FirstOrDefault()
+            ?? sets.Where(s => words.Any(w => s.Contains(w))).OrderByDescending(s => words.Count(w => s.Contains(w))).ThenBy(s => s.Length).FirstOrDefault();
+        if (best != null) Console.WriteLine($"  terrain layer {layer}: guessed {best}");
+        return best;
     }
 
     /// Terrain layer blending: CUE4Parse writes one full-size weight map per landscape layer
     /// (ll_<layer>.png); terrain_layers.json names the TQ2 ground textures for each layer.
     /// Writes terrain/*.png and terrain.json { material, tiling, layers[{name, weight, albedo, normal}] }.
-    static async Task WriteTerrain(MaterialLibrary materials, string outDir, List<UObject> landscapes, string landscapeGlb)
+    static async Task WriteTerrain(DefaultFileProvider provider, MaterialLibrary materials, string outDir, List<UObject> landscapes, string landscapeGlb)
     {
         var raw = Path.Combine(outDir, "raw_terrain");
         var session = new ExportSession(null!);
@@ -104,9 +120,9 @@ static class SceneExport
         foreach (var weight in Directory.EnumerateFiles(raw, "ll_*.png", SearchOption.AllDirectories).OrderBy(f => f))
         {
             var layer = Path.GetFileNameWithoutExtension(weight)[3..];
-            if (!mapping.TryGetValue(layer, out var set))
+            if (!mapping.TryGetValue(layer, out var set) && (set = GuessTerrainSet(provider, layer)) == null)
             {
-                Console.WriteLine($"  terrain layer {layer}: not in terrain_layers.json, skipped");
+                Console.WriteLine($"  terrain layer {layer}: not in terrain_layers.json and no matching texture set, skipped");
                 continue;
             }
             if (set == null) continue; // blend modifier without textures
@@ -179,7 +195,7 @@ static class SceneExport
         Console.WriteLine($"wrote {path}: {w}x{h} cells from {points.Count} landscape vertices");
     }
 
-    static void CollectLevel(DefaultFileProvider provider, string mapPath, Matrix4x4 parent,
+    internal static void CollectLevel(DefaultFileProvider provider, string mapPath, Matrix4x4 parent,
         List<Placement> placements, Dictionary<string, UObject> meshes, int depth)
     {
         if (depth > 8) return;

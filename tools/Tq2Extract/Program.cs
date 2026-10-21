@@ -67,6 +67,11 @@ switch (command)
         Affixes.Run(provider, cache);
         break;
 
+    case "cells":
+        // cells: survey of the Greece world partition cells (position, content) -> cache/cells.json
+        Cells.Run(provider, cache);
+        break;
+
     case "masteries":
         // masteries: skill-tree data (tiers, skills, passives, modifiers, texts, icons)
         Masteries.Run(provider, cache);
