@@ -29,9 +29,9 @@ cargo run --release
 
 WASD move · Q/E rotate camera · mouse wheel zoom · 1–3 / click pick an upgrade · Esc pause · R restart
 
-Create a hero (starting weapon) in the main menu. Items from chests go to your stash when a run
-ends; equip them in the **Armoury** and spend favour in the **Skill Tree** between runs. Your
-progress is saved in `save/profile.json`. After pulling a new version, run the assets step again
-(new weapons and animations).
+Create a hero (starting weapon and a TQ2 mastery) in the main menu. Items from chests go to your
+stash when a run ends; equip them in the **Armoury** and spend active/passive points on TQ2's
+skills in **Masteries** between runs. Your progress is saved in `save/profile.json`. After
+pulling a new version, run the assets step again (new weapons, animations, masteries, UI).
 
 See `docs/` for the asset pipeline, architecture decisions and progress.

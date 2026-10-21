@@ -62,6 +62,36 @@ switch (command)
             }
         break;
 
+    case "masteries":
+        // masteries: skill-tree data (tiers, skills, passives, modifiers, texts, icons)
+        Masteries.Run(provider, cache);
+        break;
+
+    case "dumpfile":
+    {
+        // dumpfile <pkg|dir>...: full JSON of every export into cache/dump/<package>.json, plus
+        // cache/dump/locres_en.json (English texts by namespace and key) to resolve FTexts
+        var outDir = Path.Combine(cache, "dump");
+        Directory.CreateDirectory(outDir);
+        var locres = new CUE4Parse.UE4.Localization.FTextLocalizationResource(provider.CreateReader("TQ2/Content/Localization/TQ2/en/TQ2.locres"));
+        var texts = locres.Entries.ToDictionary(ns => ns.Key.Str, ns => ns.Value.ToDictionary(k => k.Key.Str, k => k.Value.LocalizedString));
+        File.WriteAllText(Path.Combine(outDir, "locres_en.json"), JsonConvert.SerializeObject(texts, Formatting.Indented));
+        var packages = args.Skip(1).SelectMany(a => a.EndsWith(".uasset")
+            ? [a]
+            : provider.Files.Keys.Where(k => k.EndsWith(".uasset") && k.StartsWith(a, StringComparison.OrdinalIgnoreCase)));
+        foreach (var path in packages)
+        {
+            try
+            {
+                var json = JsonConvert.SerializeObject(provider.LoadPackage(path).GetExports(), Formatting.Indented);
+                File.WriteAllText(Path.Combine(outDir, Path.GetFileNameWithoutExtension(path) + ".json"), json);
+            }
+            catch (Exception ex) { Console.WriteLine($"{path}: FAILED {ex.GetType().Name}: {ex.Message}"); }
+        }
+        Console.WriteLine($"wrote {outDir}");
+        break;
+    }
+
     case "export":
         // export <name> <path|dir>...
         await Export.Run(provider, cache, args[1], args.Skip(2));

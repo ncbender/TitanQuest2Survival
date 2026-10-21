@@ -180,7 +180,7 @@ fn panel(marker: impl Component) -> impl Bundle {
     )
 }
 
-fn show_level_up(mut commands: Commands, offer: Res<Offer>, stats: Res<HeroStats>, run: Res<Run>, title: Res<TitleFont>) {
+fn show_level_up(mut commands: Commands, offer: Res<Offer>, loadout: Res<super::abilities::Loadout>, run: Res<Run>, title: Res<TitleFont>) {
     commands.spawn(panel(LevelUpPanel)).with_children(|p| {
         p.spawn((Text::new(format!("Level {} reached – choose (1–3)", run.level)), title.at(36.0)));
         for (i, upgrade) in offer.0.iter().enumerate() {
@@ -188,7 +188,7 @@ fn show_level_up(mut commands: Commands, offer: Res<Offer>, stats: Res<HeroStats
                 Node { width: Val::Px(560.0), padding: UiRect::all(Val::Px(14.0)), ..default() },
                 BackgroundColor(Color::srgb(0.22, 0.18, 0.12)),
                 BorderColor::all(Color::srgb(0.8, 0.65, 0.3)),
-                children![(Text::new(format!("{}  {}", i + 1, upgrade.title(&stats))), TextFont { font_size: FontSize::Px(22.0), ..default() })],
+                children![(Text::new(format!("{}  {}", i + 1, upgrade.title(&loadout))), TextFont { font_size: FontSize::Px(22.0), ..default() })],
             ))
             .observe(move |_: On<PointerClick>, mut clicked: ResMut<ClickedChoice>| clicked.0 = Some(i));
         }
@@ -203,17 +203,18 @@ fn choose_upgrade(
     mut hero: Query<&mut Health, With<Hero>>,
     mut next: ResMut<NextState<GameState>>,
     audio: Res<crate::audio::Audio>,
+    mut loadout: ResMut<super::abilities::Loadout>,
 ) {
     let keys_pick = [KeyCode::Digit1, KeyCode::Digit2, KeyCode::Digit3].iter().position(|k| keys.just_pressed(*k));
     let click_pick = clicked.0.take();
     // Test drivers (TQ2_AUTOPLAY, TQ2_AUTOPICK) pick the first offer.
     let auto_pick = (std::env::var_os("TQ2_AUTOPLAY").is_some() || std::env::var_os("TQ2_AUTOPICK").is_some()).then_some(0);
     let Some(choice) = keys_pick.or(click_pick).or(auto_pick).and_then(|i| offer.0.get(i)) else { return };
+    info!("picked {}", choice.title(&loadout));
     if let Ok(mut hp) = hero.single_mut() {
-        choice.apply(&mut stats, &mut hp);
+        choice.apply(&mut stats, &mut hp, &mut loadout);
     }
     audio.play(super::content::sound::PICK, None, 0.9, 0.0);
-    info!("picked {choice:?}: projectiles={} nova={} damage={:.2}", stats.projectiles, stats.nova_level, stats.damage);
     next.set(GameState::Playing);
 }
 
@@ -261,12 +262,13 @@ fn show_end(mut commands: Commands, run: Res<Run>, reward: Res<LastReward>, titl
         p.spawn((Text::new(title), title_font.at(44.0)));
         p.spawn((
             Text::new(format!(
-                "Level {}   Kills: {}   Time {:02}:{:02}\n\nFavour earned: {}   Items to the stash: {items}\n\nR – restart     M – main menu",
+                "Level {}   Kills: {}   Time {:02}:{:02}\n\nActive points: +{}   Passive points: +{}   Items to the stash: {items}\n\nR – restart     M – main menu",
                 run.level,
                 run.kills,
                 run.time as u32 / 60,
                 run.time as u32 % 60,
-                reward.favor
+                reward.active,
+                reward.passive
             )),
             TextFont { font_size: FontSize::Px(24.0), ..default() },
             TextLayout::justify(Justify::Center),

@@ -125,6 +125,30 @@ The `textures` section of `tools/assets.json` exports loose textures by name (e.
 the rest smoke. `game/src/vfx.rs` shows cells as camera-facing unlit quads (`uv_transform`
 selects the cell).
 
+## Masteries (skill tree)
+
+`dotnet run -- masteries` (also part of `assets`) writes `cache/export/masteries/masteries.json`
+and the icons/artwork as PNG:
+- structure from `TQ2/Saved/JsonDataCache/Game/TQ2/masteries/da_mastery_<id>.uasset`
+  (`TQ2MasteryDescription` → `m_Tiers` → `TQ2MasteryTierDescription` with `m_ActiveAbilities`,
+  `m_PassiveAbilities` (`m_MaxLevel`, `m_SelectableFeatsNew`), `m_SelectableModifiers`);
+  actives behind `m_RequiredEntitlements` are TQ2 work in progress and stay hidden;
+- active skills are often `GrimAbilityDescriptionSelection` blueprints: the base variant is the
+  `m_Descriptions` entry without activation tags and without `_m_` in its name;
+- each ability's class default object has `m_Name`, `m_DynamicDescription`/`m_Description`
+  (string-table references) and `m_pIconTexture`; parents are followed for missing fields;
+- texts come from the English string tables TQ2 ships as loose CSV files in
+  `TQ2/Content/TQ2/Data/Text/**.csv` (read only); the packaged `TQ2.locres` holds only engine
+  texts;
+- `{DescriptionComponent[X]}` building blocks are expanded with
+  `TQ2/Saved/JsonDataCache/Game/TQ2/Text/da_global_text_components` (identifier → string table
+  line + value variable, `X2` = next level);
+- object paths and file names differ in case (`Masteries` vs `masteries`): look packages up
+  case-insensitively.
+`dumpfile <pkg|dir>` writes complete JSON of packages to `cache/dump/` for such analysis.
+UI frames/backgrounds (`ui`), item icons (`items`) and skill VFX textures (`vfx`) are loose
+texture lists in `tools/assets.json`.
+
 ## Building all game assets
 
 `tools/assets.json` lists every character (parts, skeleton, animation folders, optional clip

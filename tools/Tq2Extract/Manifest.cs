@@ -50,6 +50,8 @@ static class Manifest
             foreach (var texture in names)
                 Console.WriteLine($"texture {texture} -> {library.ExportByName(texture) ?? "NOT FOUND"}");
         }
+        // Skill-tree data: TQ2's masteries with texts and icons -> cache/export/masteries
+        if (Wanted("masteries")) Masteries.Run(provider, cache);
         foreach (var (name, map) in manifest.scenes.Where(s => Wanted(s.Key)))
         {
             Console.WriteLine($"== scene {name}");

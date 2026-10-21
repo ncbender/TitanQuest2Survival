@@ -144,13 +144,13 @@
       "TQ2/Content/TQ2/Character/Human/Weapon/Talisman1H/Unique/Talisman1H_Molten_Orb_01/sk_talisman1h_molten_orb_01.uasset"
     ],
     "weapons": [
-      "TQ2/Content/TQ2/Character/Human/Weapon/Staff2H/Unique/Staff2H_Staff_Of_Apollo_01/sm_staff2h_staff_of_apollo_01.uasset",
       "TQ2/Content/TQ2/Character/Human/Weapon/Bow2H/Unique/Bow2H_Arch_Of_Iris_Narrow_01/sk_bow2h_arch_of_iris_narrow_01.uasset",
       "TQ2/Content/TQ2/Character/Human/Weapon/Sword1h/Unique/Sword1H_Battlemage_Sword_01/sm_sword1h_battlemage_sword_01.uasset",
       "TQ2/Content/TQ2/Character/Human/Weapon/Sword1h/Unique/Sword1H_Sword_Of_Peleus_01/sm_sword1h_sword_of_peleus_01.uasset",
-      "TQ2/Content/TQ2/Character/Human/Weapon/Axe2H/Unique/Axe2H_Sickle_Of_Kronos_01/sm_axe2h_sickle_of_kronos_01.uasset",
-      "TQ2/Content/TQ2/Character/Human/Weapon/Shield1h/Unique/Shield1H_Shield_Of_Heracles_01/sm_shield1h_shield_of_heracles_01.uasset",
-      "TQ2/Content/TQ2/Character/Human/Weapon/Talisman1H/Unique/Talisman1H_Arcane_Mirror_01/sk_talisman1h_arcane_mirror_01.uasset"
+      "TQ2/Content/TQ2/Character/Human/Weapon/Talisman1H/Unique/Talisman1H_Arcane_Mirror_01/sk_talisman1h_arcane_mirror_01.uasset",
+      "TQ2/Content/TQ2/Character/Human/Weapon/Staff2H/Unique/Staff2H_Fotia_01/sm_staff2h_fotia_01.uasset",
+      "TQ2/Content/TQ2/Character/Human/Weapon/Axe2H/Unique/Axe2H_Harpe_01/sm_axe2h_harpe_01.uasset",
+      "TQ2/Content/TQ2/Character/Human/Weapon/Shield1h/Unique/Shield1H_Shield_Of_Aeneas_01/sm_shield1h_shield_of_aeneas_01.uasset"
     ]
   },
   "scenes": {
@@ -164,7 +164,72 @@
     "vfx": [
       "t_explosion_01_05x05_c",
       "t_fire_stream_flames_a",
-      "t_explosion_flames_atlas_lin"
+      "t_explosion_flames_atlas_lin",
+      "t_ice_nova_decal_a",
+      "t_ice_nova_ring_01_a",
+      "t_lightning_branches_01_a",
+      "t_lightning_branches_02_a",
+      "t_lightning_fb_03_a",
+      "t_lightning_bolt_background_01_a",
+      "t_st_call_lightning_impact_decal_a",
+      "t_decal_frostbite_albedo",
+      "t_ice_snowfalke_atlas_a",
+      "t_storm_cyclone_thunderstorm_a",
+      "t_lightning_ribbon_01_a",
+      "t_decal_Poisonous_Field_Seamless_basecolor",
+      "t_poison_particles_a",
+      "t_ice_cracks_01_a",
+      "t_circle_01_cold_a",
+      "t_explosion_smoke_05x05_01",
+      "t_sparks_block_2x2_a",
+      "t_un_skel_evoker_ice_storm_decal_a",
+      "t_ic_alchemist_grenade_poison_decal_a",
+      "t_whirlwind_noises",
+      "t_vortex_lines_m"
+    ],
+    "ui": [
+      "t_frame_gold_activespell",
+      "t_frame_gold_passivespell",
+      "t_frame_gold_masterylevel",
+      "t_frame_gold_big02",
+      "t_frame_gold_big03",
+      "t_frame_gold_medium02",
+      "t_frame_gold_headline",
+      "t_frame_gold_skillpointspender",
+      "t_frame_gold_mods",
+      "t_frame_gold_round_modslot01",
+      "t_frame_gold_small05",
+      "t_frame_gold_big02_nameplate01",
+      "t_backdrop_marble_dark",
+      "t_backdrop_coremastery",
+      "t_bdrop_black_text01",
+      "t_button_gemstone_medium01_normal01_grey01",
+      "t_button_gemstone_medium01_hovered01_green01",
+      "t_button_gemstone_medium01_normal01_green01",
+      "t_button_gemstone_medium01_deactivated01",
+      "t_button_gemstone_medium01_normal01_orange01",
+      "t_button_gemstone_medium01_normal01_red01",
+      "t_2-3_slot_1h_sword",
+      "t_2-3_slot_1h_shield",
+      "t_2-3_slot_1h_talisman",
+      "t_2-3_slot_2h_bow",
+      "t_2-4_slot_2h_staff_",
+      "t_2-4_slot_2h_axe_",
+      "t_2-3_slot_medium",
+      "t_frame_embers",
+      "t_frame_embers_locked"
+    ],
+    "items": [
+      "t_icon_weapon_weapon_staff2h_fotia",
+      "t_icon_weapon_weapon_bow2h_arch_of_iris",
+      "t_icon_weapon_weapon_axe2h_harpe",
+      "t_icon_weapon_weapon_sword1h_battlemage_sword",
+      "t_icon_weapon_weapon_sword1h_sword_of_peleus",
+      "t_icon_weapon_itemicon_weapon_shield1h_shield_of_aeneas",
+      "t_icon_weapon_itemicon_weapon_talisman1h_arcane_mirror",
+      "t_icon_armor_torso_greek_adventurer_01_battlemage_none",
+      "t_icon_armor_torso_greek_scholar_02_01_battlemage_none",
+      "t_icon_armor_torso_greek_ranger_02_battlemage_none"
     ]
   }
 }

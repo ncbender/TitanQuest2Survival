@@ -178,6 +178,7 @@ pub fn spawn_enemy(commands: &mut Commands, def: &'static EnemyDef, at: Vec2, sc
             Vel::default(),
             Radius(def.radius * size),
             Health { hp, max: hp },
+            super::abilities::Ailments::default(),
             anim,
             Transform::from_scale(Vec3::splat(def.scale * size)),
             Visibility::default(),
@@ -194,12 +195,13 @@ fn chase_and_attack(
     obstacles: Res<Obstacles>,
     field: Res<FlowField>,
     stats: Res<super::player::HeroStats>,
+    buffs: Res<super::abilities::Buffs>,
     mut hero: Query<(&Pos, &mut Health, &Equipment), (With<Hero>, Without<Enemy>)>,
-    mut enemies: Query<(Entity, &mut Pos, &mut Vel, &Radius, &mut Enemy, &mut CharacterAnim), Without<Hero>>,
+    mut enemies: Query<(Entity, &mut Pos, &mut Vel, &Radius, &mut Enemy, &mut CharacterAnim, &super::abilities::Ailments), Without<Hero>>,
 ) {
     let Ok((hero_pos, mut hero_hp, gear)) = hero.single_mut() else { return };
     let dt = time.delta_secs();
-    for (e, mut pos, mut vel, radius, mut enemy, mut anim) in &mut enemies {
+    for (e, mut pos, mut vel, radius, mut enemy, mut anim, ail) in &mut enemies {
         let def = enemy.def;
         if enemy.spawning > 0.0 {
             enemy.spawning -= dt;
@@ -226,15 +228,15 @@ fn chase_and_attack(
 
         if dist <= reach {
             vel.0 = to_hero.normalize_or_zero() * 0.01; // keep facing the hero
-            if enemy.attack_timer <= 0.0 {
+            if enemy.attack_timer <= 0.0 && !ail.stunned() {
                 enemy.attack_timer = config::ATTACK_COOLDOWN;
-                hero_hp.hp -= enemy.damage * (1.0 - (gear.damage_reduction() + stats.armor).min(0.8));
+                hero_hp.hp -= enemy.damage * (1.0 - (gear.damage_reduction() + stats.armor + buffs.armor()).min(0.8));
                 *anim = CharacterAnim::once(def.attack);
             }
         } else {
             // Close to the hero walk straight at him; further out follow the flow field around obstacles.
             let dir = if dist < 3.0 { None } else { field.direction(pos.0) };
-            vel.0 = dir.unwrap_or(to_hero / dist.max(0.001)) * enemy.speed;
+            vel.0 = dir.unwrap_or(to_hero / dist.max(0.001)) * enemy.speed * ail.speed();
             if enemy.attack_timer < config::ATTACK_COOLDOWN - 1.0 && anim.clip != def.run {
                 *anim = CharacterAnim { speed: def.run_speed, ..CharacterAnim::looping(def.run) };
             }

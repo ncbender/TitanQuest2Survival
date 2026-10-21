@@ -24,17 +24,18 @@ pub struct HeroStats {
     pub area: f32,
     pub crit: f32,
     pub pickup: f32,
-    /// Extra fraction of enemy damage absorbed (skill tree), on top of gear.
+    /// Extra fraction of enemy damage absorbed (passives), on top of gear.
     pub armor: f32,
-    /// Multiplier for Fire Nova and Meteor damage.
+    /// Multiplier for skill damage (mastery skills).
     pub skill_damage: f32,
+    /// Multiplier for skill cooldowns.
+    pub skill_cooldown: f32,
+    /// Health regenerated per second.
+    pub regen: f32,
+    /// Bonus to skill ailment chances (0.2 = +20 %).
+    pub ailment: f32,
     /// Multiplier for collected experience.
     pub xp: f32,
-    /// Skills unlocked in the skill tree; only those are offered at level-ups.
-    pub nova_unlocked: bool,
-    pub meteor_unlocked: bool,
-    pub nova_level: u32,
-    pub meteor_level: u32,
 }
 
 impl Default for HeroStats {
@@ -50,11 +51,10 @@ impl Default for HeroStats {
             pickup: 1.0,
             armor: 0.0,
             skill_damage: 1.0,
+            skill_cooldown: 1.0,
+            regen: 0.0,
+            ailment: 0.0,
             xp: 1.0,
-            nova_unlocked: false,
-            meteor_unlocked: false,
-            nova_level: 0,
-            meteor_level: 0,
         }
     }
 }
@@ -89,6 +89,7 @@ fn move_hero(
     time: Res<Time>,
     keys: Res<ButtonInput<KeyCode>>,
     stats: Res<HeroStats>,
+    buffs: Res<super::abilities::Buffs>,
     ground: Res<Ground>,
     obstacles: Res<Obstacles>,
     rig: Query<&CameraRig>,
@@ -104,7 +105,7 @@ fn move_hero(
     }
     // Screen-relative: rotate input by the camera yaw so W always moves "up the screen".
     let dir = Vec2::from_angle(-yaw).rotate(input).normalize_or_zero();
-    vel.0 = dir * config::PLAYER_SPEED * stats.speed;
+    vel.0 = dir * config::PLAYER_SPEED * stats.speed * buffs.speed();
     let next = pos.0 + vel.0 * time.delta_secs();
     let b = ground.bounds();
     let next = ground.clamp_move(pos.0, next.clamp(b.min + 2.0, b.max - 2.0));

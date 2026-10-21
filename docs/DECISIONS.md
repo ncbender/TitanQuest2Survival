@@ -43,3 +43,16 @@ talisman. The combination picks TQ2's own stance set (`sword+shield`, `sword+swo
 `sword+talisman`, `staff2h`, `bow`, `axe2h`). Attack clips play on the upper body only (an
 animation mask from `Spine1_M` up), so the legs keep running. Only the hero gets the masked
 graph (`UpperBodyRig`): giving it to all characters dropped 500 enemies from 79 to 53 FPS.
+
+## D8 – TQ2's real masteries as the skill tree (2026-10-21, user's choice)
+The placeholder skill tree is replaced by TQ2's six masteries with their real tiers, active
+skills, passives (levels, feats) and modifiers, names, descriptions and icons (`Tq2Extract
+masteries`). User decisions: two of six masteries like TQ2 (the second at mastery level 8 of the
+first); points between runs (active points for skills, passive points for passives) plus
+level-ups in runs that raise the run's skills and add TQ2 modifiers; all masteries playable.
+TQ2's ability graphs cannot run here, so each skill maps to a survivor-style behaviour
+(`abilities.rs`), and the numbers in descriptions are filled with this game's values. Passives
+act through their own stat lines; modifiers through the words of their descriptions
+(more damage, area, cooldown, …). Feats and special passives (Rage etc.) are shown but have no
+effect yet. Three items were switched to TQ2 uniques that have item icons (Fotia, Harpe,
+Shield of Aeneas); old profile ids are migrated.

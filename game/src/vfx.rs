@@ -29,7 +29,7 @@ pub struct Sprite {
 
 /// Turns towards the camera every frame.
 #[derive(Component)]
-struct Billboard;
+pub struct Billboard;
 
 pub struct VfxPlugin;
 

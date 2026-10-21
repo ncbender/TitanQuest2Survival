@@ -1,6 +1,9 @@
-//! XP shards, level-ups and the upgrade choices.
+//! XP shards, level-ups and the upgrade choices: general bonuses, levels of the run's mastery
+//! skills and TQ2's modifiers for them.
 use bevy::prelude::*;
 
+use super::abilities::{modifier_effects, Loadout, Modifier};
+use super::mastery_data::MasteryBook;
 use super::player::{Hero, HeroStats};
 use super::{GameState, Health, Pos, Run};
 use crate::audio::Audio;
@@ -21,12 +24,10 @@ pub enum Upgrade {
     Crit,
     Vitality,
     Magnet,
-    Nova,
-    Meteor,
 }
 
 impl Upgrade {
-    pub const ALL: [Upgrade; 11] = [
+    pub const ALL: [Upgrade; 9] = [
         Upgrade::Damage,
         Upgrade::AttackSpeed,
         Upgrade::Multishot,
@@ -36,8 +37,6 @@ impl Upgrade {
         Upgrade::Crit,
         Upgrade::Vitality,
         Upgrade::Magnet,
-        Upgrade::Nova,
-        Upgrade::Meteor,
     ];
 
     /// Lower-case variant name, e.g. "multishot" (used by test hooks).
@@ -45,7 +44,7 @@ impl Upgrade {
         Upgrade::ALL.into_iter().find(|u| format!("{u:?}").eq_ignore_ascii_case(name))
     }
 
-    pub fn title(self, stats: &HeroStats) -> String {
+    pub fn title(self) -> String {
         match self {
             Upgrade::Damage => "Might of the Titans: +20 % damage".into(),
             Upgrade::AttackSpeed => "Quick Hands: +15 % attack speed".into(),
@@ -56,10 +55,6 @@ impl Upgrade {
             Upgrade::Crit => "Keen Eye: +8 % critical chance".into(),
             Upgrade::Vitality => "Vitality: +20 max health, full heal".into(),
             Upgrade::Magnet => "Attraction: +50 % pickup radius".into(),
-            Upgrade::Nova if stats.nova_level == 0 => "New skill – Fire Nova: a ring of flames around you".into(),
-            Upgrade::Nova => format!("Fire Nova level {}: more damage, radius and speed", stats.nova_level + 1),
-            Upgrade::Meteor if stats.meteor_level == 0 => "New skill – Meteor: fire falls on nearby enemies".into(),
-            Upgrade::Meteor => format!("Meteor level {}: more meteors and damage", stats.meteor_level + 1),
         }
     }
 
@@ -69,8 +64,6 @@ impl Upgrade {
             Upgrade::Pierce => stats.pierce < 5,
             Upgrade::Crit => stats.crit < 0.5,
             Upgrade::AttackSpeed => stats.cooldown > 0.3,
-            Upgrade::Nova => stats.nova_unlocked && stats.nova_level < 6,
-            Upgrade::Meteor => stats.meteor_unlocked && stats.meteor_level < 6,
             _ => true,
         }
     }
@@ -89,15 +82,50 @@ impl Upgrade {
                 hero_hp.hp = hero_hp.max;
             }
             Upgrade::Magnet => stats.pickup *= 1.5,
-            Upgrade::Nova => stats.nova_level += 1,
-            Upgrade::Meteor => stats.meteor_level += 1,
+        }
+    }
+}
+
+/// One level-up choice.
+#[derive(Clone)]
+pub enum Choice {
+    Stat(Upgrade),
+    /// +1 level for the skill in this loadout slot.
+    SkillLevel(usize),
+    /// A TQ2 modifier for the skill in this loadout slot.
+    Modifier(usize, Modifier),
+}
+
+/// Skill levels reachable in a run.
+const MAX_RUN_SKILL_LEVEL: u32 = 10;
+
+impl Choice {
+    pub fn title(&self, loadout: &Loadout) -> String {
+        match self {
+            Choice::Stat(u) => u.title(),
+            Choice::SkillLevel(i) => {
+                let s = &loadout.0[*i];
+                format!("{} level {}: +25 % damage", s.name, s.level + 1)
+            }
+            Choice::Modifier(i, m) => {
+                let effects: Vec<&str> = m.effects.iter().map(|e| e.text()).collect();
+                format!("{} – {}: {}", loadout.0[*i].name, m.name, effects.join(", "))
+            }
+        }
+    }
+
+    pub fn apply(&self, stats: &mut HeroStats, hp: &mut Health, loadout: &mut Loadout) {
+        match self {
+            Choice::Stat(u) => u.apply(stats, hp),
+            Choice::SkillLevel(i) => loadout.0[*i].level += 1,
+            Choice::Modifier(i, m) => loadout.0[*i].mods.push(m.clone()),
         }
     }
 }
 
 /// The three choices offered at the current level-up.
 #[derive(Resource, Default)]
-pub struct Offer(pub Vec<Upgrade>);
+pub struct Offer(pub Vec<Choice>);
 
 pub fn xp_for_level(level: u32) -> u32 {
     // 6, 10, 14, 19, … - the first level-up comes within the first half minute.
@@ -148,23 +176,31 @@ fn collect_shards(
     }
 }
 
-/// Rolls the three choices; the level-up panel must run after this (see hud.rs).
-pub fn make_offer(mut offer: ResMut<Offer>, stats: Res<HeroStats>, run: Res<Run>) {
-    let mut pool: Vec<Upgrade> = Upgrade::ALL.into_iter().filter(|u| u.available(&stats)).collect();
-    fastrand::shuffle(&mut pool);
-    // The first level-ups always offer the unlocked skills so every run can find them.
-    for (level, skill) in [(2, Upgrade::Nova), (3, Upgrade::Meteor)] {
-        let not_taken = match skill {
-            Upgrade::Nova => stats.nova_level == 0,
-            _ => stats.meteor_level == 0,
-        };
-        if run.level == level && not_taken && skill.available(&stats) {
-            pool.retain(|u| *u != skill);
-            pool.insert(0, skill);
+/// Rolls the three choices; the level-up panel must run after this (see hud.rs). With mastery
+/// skills in the loadout, at least one choice improves a skill (a level or a TQ2 modifier).
+pub fn make_offer(mut offer: ResMut<Offer>, stats: Res<HeroStats>, run: Res<Run>, loadout: Res<Loadout>, book: Res<MasteryBook>) {
+    let mut stat_pool: Vec<Choice> = Upgrade::ALL.into_iter().filter(|u| u.available(&stats)).map(Choice::Stat).collect();
+    let mut skill_pool: Vec<Choice> = vec![];
+    for (i, slot) in loadout.0.iter().enumerate() {
+        if slot.level < MAX_RUN_SKILL_LEVEL {
+            skill_pool.push(Choice::SkillLevel(i));
+        }
+        let Some((_, _, info)) = book.active(slot.spec.id) else { continue };
+        for m in book.modifiers(info) {
+            let effects = modifier_effects(&m.description);
+            if !effects.is_empty() && !slot.has_mod(&m.name) {
+                skill_pool.push(Choice::Modifier(i, Modifier { name: m.name.clone(), effects }));
+            }
         }
     }
-    offer.0 = pool.into_iter().take(3).collect();
-    info!("level {} offer: {:?}", run.level, offer.0);
+    fastrand::shuffle(&mut stat_pool);
+    fastrand::shuffle(&mut skill_pool);
+    let mut choices: Vec<Choice> = vec![];
+    choices.extend(skill_pool.drain(..skill_pool.len().min(if stat_pool.is_empty() { 3 } else { 2 })));
+    choices.extend(stat_pool.into_iter().take(3 - choices.len()));
+    fastrand::shuffle(&mut choices);
+    info!("level {} offer: {:?}", run.level, choices.iter().map(|c| c.title(&loadout)).collect::<Vec<_>>());
+    offer.0 = choices;
 }
 
 fn spin_shards(time: Res<Time>, ground: Res<Ground>, mut q: Query<(&Pos, &mut Transform), With<XpShard>>) {

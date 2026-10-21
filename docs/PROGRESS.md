@@ -93,6 +93,21 @@ the extra skeletons of mane/arm-hair parts were the main cost.
   1 favour into the profile file; screenshots of title, armoury, skill tree, end screen.
 - Performance: 500 enemies 76–86 FPS (two runs) after limiting the masked graph to the hero.
 
+## TQ2 masteries, styled menus (2026-10-21)
+
+- Six TQ2 masteries with real data: 61 active skills, 127 passives, 509 modifiers, 330+ icons,
+  artwork. Mastery screen in TQ2's look (gold skill/passive frames, tiers I–V, mastery art and
+  emblem, details with TQ2's text filled with this game's numbers); mastery chooser; armoury
+  with TQ2 item icons, marble background, gold frames, gemstone buttons.
+- All 61 skills have behaviour (`abilities.rs`: projectiles, strikes, novas, lines, zones,
+  rain, buffs, summons, dashes, melee, curses, chains, orbs, mines) with element ailments and
+  TQ2 VFX textures (`fx.rs`). Verified: every skill casts in a 300-enemy run per mastery, no
+  crash; FPS with all 10 skills of a mastery and 300 enemies: Storm 73, Earth 113, Warfare 105,
+  Rogue 97, Spirit 114, Forge 115. 500 enemies without skills: 79.5 FPS.
+- Passives: 117 of 127 act through their stat lines; modifiers: 327 of 509 have effects in
+  runs. Not yet: feats, special passives (Rage, …), summon models (pets are glowing orbs),
+  the hero facing its attack target.
+
 ## Blockers / risks
 
 - Usmap RVA is build-specific: a TQ2 patch requires re-running the dumper with the game open.

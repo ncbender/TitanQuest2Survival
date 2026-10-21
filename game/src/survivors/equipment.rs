@@ -56,6 +56,8 @@ const SWORD_TALISMAN_STANCE: Stance = stance!("sword+talisman");
 pub struct WeaponDef {
     pub id: &'static str,
     pub name: &'static str,
+    /// TQ2's rendered item icon (cache/export/items/textures).
+    pub icon: &'static str,
     pub mesh: &'static str,
     pub two_handed: bool,
     /// Bone it is carried on when in the main hand.
@@ -77,9 +79,10 @@ pub struct WeaponDef {
 }
 
 pub const STAFF: WeaponDef = WeaponDef {
-    id: "staff_of_apollo",
-    name: "Staff of Apollo",
-    mesh: "weapons/TQ2/Content/TQ2/Character/Human/Weapon/Staff2H/Unique/Staff2H_Staff_Of_Apollo_01/sm_staff2h_staff_of_apollo_01.glb",
+    id: "fotia",
+    name: "Fotia",
+    icon: "t_icon_weapon_weapon_staff2h_fotia",
+    mesh: "weapons/TQ2/Content/TQ2/Character/Human/Weapon/Staff2H/Unique/Staff2H_Fotia_01/sm_staff2h_fotia_01.glb",
     two_handed: true,
     bone: "HandAttach_R",
     flip: true,
@@ -97,6 +100,7 @@ pub const STAFF: WeaponDef = WeaponDef {
 pub const BOW: WeaponDef = WeaponDef {
     id: "arch_of_iris",
     name: "Arch of Iris",
+    icon: "t_icon_weapon_weapon_bow2h_arch_of_iris",
     mesh: "weapons/TQ2/Content/TQ2/Character/Human/Weapon/Bow2H/Unique/Bow2H_Arch_Of_Iris_Narrow_01/sk_bow2h_arch_of_iris_narrow_01.glb",
     two_handed: true,
     bone: "HandAttach_L",
@@ -113,9 +117,10 @@ pub const BOW: WeaponDef = WeaponDef {
 };
 
 pub const AXE: WeaponDef = WeaponDef {
-    id: "sickle_of_kronos",
-    name: "Sickle of Kronos",
-    mesh: "weapons/TQ2/Content/TQ2/Character/Human/Weapon/Axe2H/Unique/Axe2H_Sickle_Of_Kronos_01/sm_axe2h_sickle_of_kronos_01.glb",
+    id: "harpe",
+    name: "Harpe",
+    icon: "t_icon_weapon_weapon_axe2h_harpe",
+    mesh: "weapons/TQ2/Content/TQ2/Character/Human/Weapon/Axe2H/Unique/Axe2H_Harpe_01/sm_axe2h_harpe_01.glb",
     two_handed: true,
     bone: "HandAttach_R",
     flip: true,
@@ -133,6 +138,7 @@ pub const AXE: WeaponDef = WeaponDef {
 pub const SWORD: WeaponDef = WeaponDef {
     id: "battlemage_sword",
     name: "Battlemage Sword",
+    icon: "t_icon_weapon_weapon_sword1h_battlemage_sword",
     mesh: "weapons/TQ2/Content/TQ2/Character/Human/Weapon/Sword1H/Unique/Sword1H_Battlemage_Sword_01/sm_sword1h_battlemage_sword_01.glb",
     two_handed: false,
     bone: "HandAttach_R",
@@ -151,6 +157,7 @@ pub const SWORD: WeaponDef = WeaponDef {
 pub const PELEUS: WeaponDef = WeaponDef {
     id: "sword_of_peleus",
     name: "Sword of Peleus",
+    icon: "t_icon_weapon_weapon_sword1h_sword_of_peleus",
     mesh: "weapons/TQ2/Content/TQ2/Character/Human/Weapon/Sword1H/Unique/Sword1H_Sword_Of_Peleus_01/sm_sword1h_sword_of_peleus_01.glb",
     damage: 18.0,
     cooldown: 0.8,
@@ -163,14 +170,16 @@ pub const WEAPONS: &[&WeaponDef] = &[&STAFF, &BOW, &AXE, &SWORD, &PELEUS];
 pub struct ShieldDef {
     pub id: &'static str,
     pub name: &'static str,
+    pub icon: &'static str,
     pub mesh: &'static str,
     pub block: f32,
 }
 
-pub const HERACLES_SHIELD: ShieldDef = ShieldDef {
-    id: "shield_of_heracles",
-    name: "Shield of Heracles",
-    mesh: "weapons/TQ2/Content/TQ2/Character/Human/Weapon/Shield1H/Unique/Shield1H_Shield_Of_Heracles_01/sm_shield1h_shield_of_heracles_01.glb",
+pub const AENEAS_SHIELD: ShieldDef = ShieldDef {
+    id: "shield_of_aeneas",
+    name: "Shield of Aeneas",
+    icon: "t_icon_weapon_itemicon_weapon_shield1h_shield_of_aeneas",
+    mesh: "weapons/TQ2/Content/TQ2/Character/Human/Weapon/Shield1H/Unique/Shield1H_Shield_Of_Aeneas_01/sm_shield1h_shield_of_aeneas_01.glb",
     block: 0.2,
 };
 
@@ -178,6 +187,7 @@ pub const HERACLES_SHIELD: ShieldDef = ShieldDef {
 pub struct TalismanDef {
     pub id: &'static str,
     pub name: &'static str,
+    pub icon: &'static str,
     pub mesh: &'static str,
     pub skill_damage: f32,
 }
@@ -185,6 +195,7 @@ pub struct TalismanDef {
 pub const ARCANE_MIRROR: TalismanDef = TalismanDef {
     id: "arcane_mirror",
     name: "Arcane Mirror",
+    icon: "t_icon_weapon_itemicon_weapon_talisman1h_arcane_mirror",
     mesh: "weapons/TQ2/Content/TQ2/Character/Human/Weapon/Talisman1H/Unique/Talisman1H_Arcane_Mirror_01/sk_talisman1h_arcane_mirror_01.glb",
     skill_damage: 0.4,
 };
@@ -192,6 +203,7 @@ pub const ARCANE_MIRROR: TalismanDef = TalismanDef {
 pub struct ArmorDef {
     pub id: &'static str,
     pub name: &'static str,
+    pub icon: &'static str,
     pub parts: &'static [&'static str],
     /// Fraction of enemy damage absorbed.
     pub armor: f32,
@@ -200,6 +212,7 @@ pub struct ArmorDef {
 pub const ADVENTURER: ArmorDef = ArmorDef {
     id: "adventurer",
     name: "Adventurer's Garb",
+    icon: "t_icon_armor_torso_greek_adventurer_01_battlemage_none",
     parts: &["hero/sk_male_torso_greek_adventurer_01_animated.glb", "hero/sk_male_leg_greek_adventurer_01_animated.glb"],
     armor: 0.0,
 };
@@ -207,6 +220,7 @@ pub const ADVENTURER: ArmorDef = ArmorDef {
 pub const SCHOLAR: ArmorDef = ArmorDef {
     id: "scholar",
     name: "Scholar's Robes",
+    icon: "t_icon_armor_torso_greek_scholar_02_01_battlemage_none",
     parts: &["hero/sk_male_torso_greek_scholar_02_01_animated.glb", "hero/sk_male_leg_greek_scholar_02_01_animated.glb"],
     armor: 0.12,
 };
@@ -214,6 +228,7 @@ pub const SCHOLAR: ArmorDef = ArmorDef {
 pub const RANGER: ArmorDef = ArmorDef {
     id: "ranger",
     name: "Ranger's Armour",
+    icon: "t_icon_armor_torso_greek_ranger_02_battlemage_none",
     parts: &[
         "hero/sk_male_torso_greek_ranger_02_animated.glb",
         "hero/sk_male_leg_greek_ranger_02_animated.glb",
@@ -243,7 +258,7 @@ pub const ITEMS: &[Item] = &[
     Item::Weapon(&AXE),
     Item::Weapon(&SWORD),
     Item::Weapon(&PELEUS),
-    Item::Shield(&HERACLES_SHIELD),
+    Item::Shield(&AENEAS_SHIELD),
     Item::Talisman(&ARCANE_MIRROR),
     Item::Armor(&ADVENTURER),
     Item::Armor(&SCHOLAR),
@@ -261,7 +276,25 @@ impl Item {
     }
 
     pub fn from_id(id: &str) -> Option<Item> {
+        // Items renamed in later versions keep working in old profiles.
+        let id = match id {
+            "staff_of_apollo" => "fotia",
+            "sickle_of_kronos" => "harpe",
+            "shield_of_heracles" => "shield_of_aeneas",
+            other => other,
+        };
         ITEMS.iter().copied().find(|i| i.id() == id)
+    }
+
+    /// TQ2's item icon (below the asset root).
+    pub fn icon(self) -> String {
+        let name = match self {
+            Item::Weapon(w) => w.icon,
+            Item::Shield(s) => s.icon,
+            Item::Talisman(t) => t.icon,
+            Item::Armor(a) => a.icon,
+        };
+        format!("items/textures/{name}.png")
     }
 
     pub fn name(self) -> &'static str {
@@ -480,7 +513,7 @@ mod tests {
 
     #[test]
     fn two_handed_empties_off_hand() {
-        let mut eq = Equipment { main: &SWORD, off: Some(OffHand::Shield(&HERACLES_SHIELD)), armor: &ADVENTURER };
+        let mut eq = Equipment { main: &SWORD, off: Some(OffHand::Shield(&AENEAS_SHIELD)), armor: &ADVENTURER };
         eq.equip_main(&AXE);
         assert!(eq.off.is_none());
         assert!(!eq.equip_off(Some(OffHand::Talisman(&ARCANE_MIRROR))));

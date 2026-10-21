@@ -1,6 +1,7 @@
 //! The Survivors game loop. Simulation state lives in plain components on the ground
 //! plane (`Pos`, `Vel`, `Health`…) and runs in `FixedUpdate`; visuals only follow it.
 //! Keeping the simulation separate is what later lets a host run it for two players.
+mod abilities;
 mod bench;
 mod bestiary;
 mod camera;
@@ -9,11 +10,14 @@ mod enemies;
 mod equipment;
 mod flowfield;
 mod hud;
+pub mod mastery_data;
 mod menu;
 mod player;
 mod profile;
 mod progression;
 mod skills;
+mod skilltree;
+mod ui;
 
 use bevy::prelude::*;
 
@@ -26,9 +30,6 @@ pub mod content {
 
     pub const ARROW: &str = "props/TQ2/Content/TQ2/Character/Human/Weapon/Bow2H/Projectile/sm_projectile_greek_narrow_01.glb";
     pub const SHARD: &str = "props/TQ2/Content/TQ2/Character/Crafting/In_World/Mystical_Shards/sm_mystic_shards.glb";
-    /// Forge Call ability ring (TQ2) used as the Nova shockwave; outer radius in metres.
-    pub const NOVA_RING: &str = "props/TQ2/Content/TQ2/Character/Abilities/Forge_Call_01/sm_forge_call_ring_outer.glb";
-    pub const NOVA_RING_RADIUS: f32 = 0.16;
 
     /// TQ2 FMOD events (see `tq2_survivors --list-sounds`).
     pub mod sound {
@@ -36,7 +37,6 @@ pub mod content {
         pub const RUN_MUSIC: &str = "event:/music/mus_combat_generic_01";
         pub const BOSS_MUSIC: &str = "event:/music/mus_centaur_chapter_bossfight_centaurus";
         pub const NOVA: &str = "event:/abilities/player/masteries/spirit/death_nova/sfx_ability_player_death_nova_commit";
-        pub const METEOR: &str = "event:/abilities/enemies/boarmen/sfx_ability_enemies_bo_firemancer_meteor_small_impact";
         pub const KILL: &str = "event:/weapons/hit/sfx_weapon_hit_generic_medium";
         pub const SHARD: &str = "event:/loot/pickup/misc/sfx_loot_pickup_gold";
         pub const LEVEL_UP: &str = "event:/ui/menu/mastery_screen/sfx_ui_menu_mastery_screen_ability_level_up_release";
@@ -132,6 +132,7 @@ impl Plugin for SurvivorsPlugin {
             .add_message::<StartRun>()
             .add_plugins((camera::plugin, player::plugin, enemies::plugin, combat::plugin, progression::plugin, hud::plugin))
             .add_plugins((menu::plugin, bench::plugin, flowfield::plugin, equipment::plugin, profile::plugin))
+            .add_plugins((mastery_data::plugin, abilities::plugin, skilltree::plugin))
             .add_systems(Startup, skip_menu_in_tests)
             .add_systems(OnEnter(GameState::MainMenu), clear_run)
             .add_systems(Update, ((start_run, follow_ground, restart).chain(), music));
@@ -161,6 +162,7 @@ fn start_run(
     arena: Res<Arena>,
     mut profile: ResMut<profile::Profile>,
     mut loot: ResMut<equipment::RunLoot>,
+    book: Res<mastery_data::MasteryBook>,
     entities: Query<Entity, With<RunEntity>>,
 ) {
     if requests.read().count() == 0 {
@@ -172,6 +174,7 @@ fn start_run(
     *run = Run { level: 1, xp_next: progression::xp_for_level(1), ..default() };
     *stats = player::HeroStats::default();
     loot.0.clear();
+    commands.insert_resource(abilities::Buffs::default());
     enemies::reset(&mut commands);
     combat::reset(&mut commands);
     if !profile.created {
@@ -179,7 +182,8 @@ fn start_run(
         *profile = profile::Profile::new_hero(&equipment::STAFF);
     }
     let mut hp = Health { hp: config::PLAYER_HP, max: config::PLAYER_HP };
-    skills::apply(&profile, &mut stats, &mut hp);
+    skills::apply(&profile, &book, &mut stats, &mut hp);
+    commands.insert_resource(run_loadout(&profile, &book));
     let mut gear = profile.equipment();
     // Test hook: TQ2_TEST_CHEST=1 drops a chest right next to the hero.
     if std::env::var_os("TQ2_TEST_CHEST").is_some() {
@@ -220,6 +224,31 @@ fn start_run(
     next.set(GameState::Playing);
 }
 
+/// The run's skills: the profile's equipped skills, or TQ2_TEST_SKILLS=Ice Shards,Fissure,…
+/// (TQ2 skill names, for tests) regardless of the profile.
+fn run_loadout(profile: &profile::Profile, book: &mastery_data::MasteryBook) -> abilities::Loadout {
+    let mut slots = vec![];
+    let test: Option<Vec<String>> = std::env::var("TQ2_TEST_SKILLS").ok().map(|s| s.split(',').map(|n| n.trim().to_ascii_lowercase()).collect());
+    let wanted: Vec<(String, u32)> = match &test {
+        Some(names) => book
+            .0
+            .iter()
+            .flat_map(|m| m.tiers.iter().flat_map(|t| t.actives.iter()))
+            .filter(|a| !a.wip && names.contains(&a.name.to_ascii_lowercase()))
+            .map(|a| (a.id.clone(), 1))
+            .collect(),
+        None => profile.equipped.iter().map(|id| (id.clone(), profile.active_level(id))).collect(),
+    };
+    for (id, level) in wanted {
+        match (abilities::spec(&id), book.active(&id)) {
+            (Some(spec), Some((_, _, info))) => slots.push(abilities::Slot::new(spec, info.name.clone(), level)),
+            _ => warn!("skill {id} is not playable"),
+        }
+    }
+    info!("run skills: {:?}", slots.iter().map(|s| format!("{} {}", s.name, s.level)).collect::<Vec<_>>());
+    abilities::Loadout(slots)
+}
+
 /// Short names for TQ2_TEST_GEAR.
 fn test_gear_alias(name: &str) -> Option<equipment::Item> {
     use equipment::*;
@@ -229,7 +258,7 @@ fn test_gear_alias(name: &str) -> Option<equipment::Item> {
         "axe" => Item::Weapon(&AXE),
         "sword" => Item::Weapon(&SWORD),
         "peleus" => Item::Weapon(&PELEUS),
-        "shield" => Item::Shield(&HERACLES_SHIELD),
+        "shield" => Item::Shield(&AENEAS_SHIELD),
         "talisman" => Item::Talisman(&ARCANE_MIRROR),
         _ => return None,
     })
