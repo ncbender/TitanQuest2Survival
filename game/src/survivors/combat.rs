@@ -87,13 +87,13 @@ fn auto_attack(
     stats: Res<HeroStats>,
     mut weapons: ResMut<Weapons>,
     grid: Res<EnemyGrid>,
-    hero: Query<(Entity, &Pos, &Equipment), With<Hero>>,
+    hero: Query<(Entity, &Pos, &super::Vel, &Equipment), With<Hero>>,
     mut enemies: Query<(&mut Health, &Ailments), With<Enemy>>,
     mut hits: MessageWriter<Hit>,
     flipbook: Res<Flipbook>,
     buffs: Res<Buffs>,
 ) {
-    let Ok((hero_entity, hero, eq)) = hero.single() else { return };
+    let Ok((hero_entity, hero, hero_vel, eq)) = hero.single() else { return };
     let w = eq.main;
     let base = w.damage * stats.damage * buffs.damage();
     weapons.attack_timer -= time.delta_secs();
@@ -111,8 +111,13 @@ fn auto_attack(
     let attacks = eq.stance().attacks;
     let clip = attacks[weapons.attack_index % attacks.len()];
     weapons.attack_index += 1;
-    commands.entity(hero_entity).insert(UpperBodyAction { clip, max_duration: weapons.attack_timer.max(0.35) });
     let aim = (target - hero.0).normalize_or(Vec2::X);
+    // Standing heroes swing with the whole body; running ones with the upper body only.
+    let full_body = hero_vel.0.length_squared() < 0.1;
+    commands.entity(hero_entity).insert((
+        UpperBodyAction { clip, max_duration: weapons.attack_timer.max(0.35), full_body },
+        super::Facing { dir: aim, time: 0.45 },
+    ));
     let at = Vec3::new(hero.0.x, ground.stand(hero.0) + 1.2, hero.0.y);
     audio.play(w.fire_sound, Some(at), 0.5, 0.1);
 

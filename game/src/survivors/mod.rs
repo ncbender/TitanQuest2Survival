@@ -281,19 +281,32 @@ fn music(audio: Res<Audio>, state: Res<State<GameState>>, enemies: Query<&enemie
     audio.music(track, 0.6);
 }
 
-/// Places every simulated unit on the terrain and turns it towards where it moves.
+/// Turns a unit towards `dir` for `time` seconds (attacking), regardless of where it walks.
+#[derive(Component)]
+pub struct Facing {
+    pub dir: Vec2,
+    pub time: f32,
+}
+
+/// Places every simulated unit on the terrain and turns it towards where it moves (or where
+/// it attacks).
 fn follow_ground(
     time: Res<Time>,
     ground: Res<Ground>,
-    mut units: Query<(&Pos, Option<&Vel>, &Radius, &mut Transform), With<Health>>,
+    mut units: Query<(&Pos, Option<&Vel>, &Radius, &mut Transform, Option<&mut Facing>), With<Health>>,
 ) {
-    for (pos, vel, radius, mut t) in &mut units {
+    let dt = time.delta_secs();
+    for (pos, vel, radius, mut t, facing) in &mut units {
         // Highest ground under the feet, so feet never sink into a slope.
         t.translation = Vec3::new(pos.0.x, ground.stand_area(pos.0, radius.0 * 0.6), pos.0.y);
-        if let Some(v) = vel.filter(|v| v.0.length_squared() > 1e-6) {
+        let attack = facing.and_then(|mut f| {
+            f.time -= dt;
+            (f.time > 0.0).then_some(f.dir)
+        });
+        if let Some(dir) = attack.or(vel.map(|v| v.0)).filter(|d| d.length_squared() > 1e-6) {
             // Exported TQ2 characters face +Z (toe bones lie at +Z in the bind pose).
-            let target = Quat::from_rotation_y(f32::atan2(v.0.x, v.0.y));
-            t.rotation = t.rotation.slerp(target, (12.0 * time.delta_secs()).min(1.0));
+            let target = Quat::from_rotation_y(f32::atan2(dir.x, dir.y));
+            t.rotation = t.rotation.slerp(target, (14.0 * dt).min(1.0));
         }
     }
 }

@@ -53,13 +53,19 @@ impl CharacterAnim {
     }
 }
 
-/// A one-shot clip on the upper body over the base clip (e.g. an attack while running).
-/// Inserting it again restarts it. The clip is sped up to fit into `max_duration` seconds.
+/// A one-shot clip over the base clip (an attack): on the upper body only while running, on
+/// the whole body when standing. Inserting a new one crossfades from the previous one. The
+/// clip is sped up (at most `MAX_ACTION_SPEED`) to fit into `max_duration` seconds.
 #[derive(Component, Clone)]
 pub struct UpperBodyAction {
     pub clip: &'static str,
     pub max_duration: f32,
+    pub full_body: bool,
 }
+
+const MAX_ACTION_SPEED: f32 = 1.6;
+/// Time over which a replaced action fades out.
+const RELEASE: f32 = 0.18;
 
 /// Marks a character whose parts get upper-body animation nodes (the hero). Others skip
 /// them: the masks cost a third of the frame rate with 500 animated enemies.
@@ -73,8 +79,8 @@ const LOWER_BODY_GROUP: u32 = 0;
 /// Weight of an upper-body action against the base clip at full strength (blending is
 /// normalised, so 20:1 leaves ~5 % of the base clip in the arms).
 const UPPER_BODY_WEIGHT: f32 = 20.0;
-const FADE_IN: f32 = 0.08;
-const FADE_OUT: f32 = 0.15;
+const FADE_IN: f32 = 0.1;
+const FADE_OUT: f32 = 0.25;
 
 /// A static mesh (weapon, prop) carried on one of the character's bones, e.g. a staff on
 /// `HandAttach_R`. TQ2 weapon meshes are modelled around their grip, so only a rotation
@@ -134,12 +140,14 @@ struct PartAssets {
     graph: Option<PartGraph>,
 }
 
-/// Every clip of a part twice: full body (`base`) and upper body only (`upper`).
+/// Every clip of a part as a looping base node (`base`) and, for rigged characters, as action
+/// nodes on the upper body (`upper`) and on the whole body (`full`).
 struct PartGraph {
     handle: Handle<AnimationGraph>,
     base: HashMap<String, AnimationNodeIndex>,
     upper: HashMap<String, AnimationNodeIndex>,
-    /// Clip length of every upper-body node.
+    full: HashMap<String, AnimationNodeIndex>,
+    /// Clip length of every action node.
     durations: HashMap<AnimationNodeIndex, f32>,
 }
 
@@ -209,15 +217,19 @@ fn instantiate_parts(
         let Some(gltf) = gltfs.get(&entry.gltf) else { continue };
         if entry.graph.is_none() {
             let mut graph = AnimationGraph::new();
-            let (mut base, mut upper, mut durations) = (HashMap::new(), HashMap::new(), HashMap::new());
+            let (mut base, mut upper, mut full, mut durations) = (HashMap::new(), HashMap::new(), HashMap::new(), HashMap::new());
             // Graphs are shared per part file; a file is either worn by rigged characters or not.
             let rigged = rigs.contains(parent.parent());
             for (name, clip) in &gltf.named_animations {
                 base.insert(name.to_string(), graph.add_clip(clip.clone(), 1.0, graph.root));
                 if rigged {
+                    let duration = clips.get(clip).map_or(1.0, |c| c.duration());
                     let node = graph.add_clip_with_mask(clip.clone(), 1 << LOWER_BODY_GROUP, 1.0, graph.root);
                     upper.insert(name.to_string(), node);
-                    durations.insert(node, clips.get(clip).map_or(1.0, |c| c.duration()));
+                    durations.insert(node, duration);
+                    let node = graph.add_clip(clip.clone(), 1.0, graph.root);
+                    full.insert(name.to_string(), node);
+                    durations.insert(node, duration);
                 }
             }
             if rigged {
@@ -225,7 +237,7 @@ fn instantiate_parts(
                     graph.add_target_to_mask_group(target, LOWER_BODY_GROUP);
                 }
             }
-            entry.graph = Some(PartGraph { handle: graphs.add(graph), base, upper, durations });
+            entry.graph = Some(PartGraph { handle: graphs.add(graph), base, upper, full, durations });
         }
         commands
             .entity(entity)
@@ -356,40 +368,59 @@ fn drive_animation(
     }
 }
 
-/// Starts upper-body actions and fades them in and out over the base clip.
+/// Action nodes of a player that were replaced and are fading out (node -> seconds left).
+#[derive(Component, Default)]
+struct Releasing(HashMap<AnimationNodeIndex, f32>);
+
+/// Starts actions and fades them in and out over the base clip; a new action crossfades from
+/// the previous one instead of cutting it off.
 fn drive_upper_body(
+    mut commands: Commands,
+    time: Res<Time>,
     library: Res<PartLibrary>,
     started: Query<(Entity, &UpperBodyAction), Changed<UpperBodyAction>>,
-    mut players: Query<(&PlayerOf, &mut AnimationPlayer)>,
+    mut players: Query<(Entity, &PlayerOf, &mut AnimationPlayer, Option<&mut Releasing>)>,
 ) {
+    let dt = time.delta_secs();
     let started: HashMap<Entity, &UpperBodyAction> = started.iter().collect();
-    for (of, mut player) in &mut players {
+    for (entity, of, mut player, releasing) in &mut players {
         let Some(graph) = library.0.get(&of.path).and_then(|p| p.graph.as_ref()) else { continue };
-        if let Some(&node) = started.get(&of.root).and_then(|a| graph.upper.get(a.clip)) {
-            let running: Vec<AnimationNodeIndex> =
-                player.playing_animations().map(|(n, _)| *n).filter(|n| graph.durations.contains_key(n)).collect();
-            for n in running {
-                player.stop(n);
+        let mut release = releasing.map(|r| std::mem::take(&mut r.into_inner().0)).unwrap_or_default();
+        if let Some(action) = started.get(&of.root) {
+            let nodes = if action.full_body { &graph.full } else { &graph.upper };
+            if let Some(&node) = nodes.get(action.clip) {
+                for (n, _) in player.playing_animations() {
+                    if graph.durations.contains_key(n) && *n != node {
+                        release.entry(*n).or_insert(RELEASE);
+                    }
+                }
+                release.remove(&node);
+                let speed = (graph.durations[&node] / action.max_duration).clamp(1.0, MAX_ACTION_SPEED);
+                let active = player.play(node);
+                active.replay();
+                active.set_repeat(RepeatAnimation::Never).set_speed(speed).set_weight(0.0);
             }
-            let speed = (graph.durations[&node] / started[&of.root].max_duration).max(1.0);
-            let active = player.play(node);
-            active.replay();
-            active.set_repeat(RepeatAnimation::Never).set_speed(speed).set_weight(0.0);
         }
         let mut finished = vec![];
         for (node, active) in player.playing_animations_mut() {
             let Some(&duration) = graph.durations.get(node) else { continue };
             let t = active.seek_time();
-            if active.is_finished() || t >= duration {
+            let left = release.get_mut(node).map(|r| {
+                *r -= dt;
+                *r
+            });
+            if active.is_finished() || t >= duration || left.is_some_and(|l| l <= 0.0) {
                 finished.push(*node);
                 continue;
             }
-            let envelope = (t / FADE_IN).min(1.0) * ((duration - t) / FADE_OUT).clamp(0.0, 1.0);
+            let envelope = (t / FADE_IN).min(1.0) * ((duration - t) / FADE_OUT).clamp(0.0, 1.0) * left.map_or(1.0, |l| l / RELEASE);
             active.set_weight(UPPER_BODY_WEIGHT * envelope);
         }
         for node in finished {
             player.stop(node);
+            release.remove(&node);
         }
+        commands.entity(entity).insert(Releasing(release));
     }
 }
 
