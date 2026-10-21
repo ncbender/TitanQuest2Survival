@@ -138,7 +138,8 @@ fn collect_shards(
     }
 }
 
-fn make_offer(mut offer: ResMut<Offer>, stats: Res<HeroStats>, run: Res<Run>) {
+/// Rolls the three choices; the level-up panel must run after this (see hud.rs).
+pub fn make_offer(mut offer: ResMut<Offer>, stats: Res<HeroStats>, run: Res<Run>) {
     let mut pool: Vec<Upgrade> = Upgrade::ALL.into_iter().filter(|u| u.available(&stats)).collect();
     fastrand::shuffle(&mut pool);
     // The first level-up always offers the second ability so every run can find it.
@@ -147,6 +148,7 @@ fn make_offer(mut offer: ResMut<Offer>, stats: Res<HeroStats>, run: Res<Run>) {
         pool.insert(0, Upgrade::Nova);
     }
     offer.0 = pool.into_iter().take(3).collect();
+    info!("level {} offer: {:?}", run.level, offer.0);
 }
 
 fn spin_shards(time: Res<Time>, ground: Res<Ground>, mut q: Query<(&Pos, &mut Transform), With<XpShard>>) {

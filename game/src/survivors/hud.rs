@@ -30,7 +30,8 @@ pub fn plugin(app: &mut App) {
     app.init_resource::<ClickedChoice>()
         .add_systems(Startup, spawn_hud)
         .add_systems(Update, (update_hud, hud_visibility, spawn_damage_numbers, float_damage_numbers))
-        .add_systems(OnEnter(GameState::LevelUp), show_level_up)
+        // The panel shows the offer, so it must run after the offer is rolled.
+        .add_systems(OnEnter(GameState::LevelUp), show_level_up.after(super::progression::make_offer))
         .add_systems(OnExit(GameState::LevelUp), despawn::<LevelUpPanel>)
         .add_systems(Update, choose_upgrade.run_if(in_state(GameState::LevelUp)))
         .add_systems(OnEnter(GameState::GameOver), show_end)
@@ -195,12 +196,13 @@ fn choose_upgrade(
 ) {
     let keys_pick = [KeyCode::Digit1, KeyCode::Digit2, KeyCode::Digit3].iter().position(|k| keys.just_pressed(*k));
     let click_pick = clicked.0.take();
-    // Test driver picks the first offer.
-    let auto_pick = std::env::var_os("TQ2_AUTOPLAY").map(|_| 0);
+    // Test drivers (TQ2_AUTOPLAY, TQ2_AUTOPICK) pick the first offer.
+    let auto_pick = (std::env::var_os("TQ2_AUTOPLAY").is_some() || std::env::var_os("TQ2_AUTOPICK").is_some()).then_some(0);
     let Some(choice) = keys_pick.or(click_pick).or(auto_pick).and_then(|i| offer.0.get(i)) else { return };
     if let Ok(mut hp) = hero.single_mut() {
         choice.apply(&mut stats, &mut hp);
     }
+    info!("picked {choice:?}: projectiles={} nova={} damage={:.2}", stats.projectiles, stats.nova_level, stats.damage);
     next.set(GameState::Playing);
 }
 
