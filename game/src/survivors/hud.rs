@@ -6,7 +6,10 @@ use super::progression::Offer;
 use super::{GameState, Health, Run};
 use super::combat::Hit;
 use super::equipment::{LootOffer, RunLoot};
+use super::items::AffixBook;
+use super::mastery_data::{MasteryBook, GOLD, TEXT};
 use super::profile::LastReward;
+use super::ui::{self, sliced, text};
 use crate::fonts::TitleFont;
 use crate::ground::Ground;
 use crate::survivors::enemies::Enemy;
@@ -180,18 +183,70 @@ fn panel(marker: impl Component) -> impl Bundle {
     )
 }
 
-fn show_level_up(mut commands: Commands, offer: Res<Offer>, loadout: Res<super::abilities::Loadout>, run: Res<Run>, title: Res<TitleFont>) {
+/// A centred TQ2 window: gold frame over a dark fill, with a title in a gold nameplate.
+fn window(p: &mut ChildSpawnerCommands, assets: &AssetServer, title_font: &TitleFont, title: String, width: f32, body: impl FnOnce(&mut ChildSpawnerCommands)) {
+    p.spawn((
+        Node { width: Val::Px(width), flex_direction: FlexDirection::Column, align_items: AlignItems::Center, row_gap: Val::Px(10.0), padding: UiRect::new(Val::Px(26.0), Val::Px(26.0), Val::Px(16.0), Val::Px(24.0)), ..default() },
+        sliced(assets, "t_frame_gold_big03", 48.0, Color::WHITE),
+    ))
+    .with_children(|w| {
+        // The frame's art is inset; the dark fill sits inside it.
+        w.spawn((
+            Node { position_type: PositionType::Absolute, left: Val::Px(14.0), right: Val::Px(14.0), top: Val::Px(14.0), bottom: Val::Px(14.0), ..default() },
+            BackgroundColor(Color::srgba(0.03, 0.03, 0.035, 0.93)),
+            ZIndex(-1),
+        ));
+        w.spawn((Node { padding: UiRect::axes(Val::Px(48.0), Val::Px(10.0)), margin: UiRect::bottom(Val::Px(6.0)), ..default() }, sliced(assets, "t_frame_gold_big02_nameplate01", 24.0, Color::WHITE)))
+            .with_children(|n| {
+                n.spawn((Text::new(title), title_font.at(30.0), TextColor(GOLD)));
+            });
+        body(w);
+    });
+}
+
+fn show_level_up(
+    mut commands: Commands,
+    assets: Res<AssetServer>,
+    offer: Res<Offer>,
+    loadout: Res<super::abilities::Loadout>,
+    book: Res<MasteryBook>,
+    run: Res<Run>,
+    title: Res<TitleFont>,
+) {
     commands.spawn(panel(LevelUpPanel)).with_children(|p| {
-        p.spawn((Text::new(format!("Level {} reached – choose (1–3)", run.level)), title.at(36.0)));
-        for (i, upgrade) in offer.0.iter().enumerate() {
-            p.spawn((
-                Node { width: Val::Px(560.0), padding: UiRect::all(Val::Px(14.0)), ..default() },
-                BackgroundColor(Color::srgb(0.22, 0.18, 0.12)),
-                BorderColor::all(Color::srgb(0.8, 0.65, 0.3)),
-                children![(Text::new(format!("{}  {}", i + 1, upgrade.title(&loadout))), TextFont { font_size: FontSize::Px(22.0), ..default() })],
-            ))
-            .observe(move |_: On<PointerClick>, mut clicked: ResMut<ClickedChoice>| clicked.0 = Some(i));
-        }
+        window(p, &assets, &title, format!("Level {}", run.level), 720.0, |w| {
+            w.spawn((Text::new("Choose a blessing (1–3 or click)"), text(18.0), TextColor(TEXT)));
+            for (i, choice) in offer.0.iter().enumerate() {
+                let (frame, fw, fh, icon_top, icon) = if choice.is_skill() {
+                    ("t_frame_gold_activespell", 60.0, 70.0, 7.0, 42.0)
+                } else {
+                    ("t_frame_gold_passivespell", 56.0, 66.0, 11.0, 34.0)
+                };
+                let title_text = choice.title(&loadout);
+                let (head, tail) = title_text.split_once(": ").map_or((title_text.as_str(), ""), |(a, b)| (a, b));
+                w.spawn((
+                    Node { width: Val::Percent(100.0), padding: UiRect::axes(Val::Px(14.0), Val::Px(8.0)), column_gap: Val::Px(14.0), align_items: AlignItems::Center, ..default() },
+                    BackgroundColor(Color::srgba(0.09, 0.08, 0.07, 0.95)),
+                    sliced(&assets, "t_frame_gold_small05", 10.0, Color::WHITE),
+                ))
+                .with_children(|row| {
+                    row.spawn((Text::new(format!("{}", i + 1)), title.at(26.0), TextColor(GOLD), Node { width: Val::Px(22.0), ..default() }));
+                    row.spawn((Node { width: Val::Px(fw), height: Val::Px(fh), justify_content: JustifyContent::Center, flex_shrink: 0.0, ..default() }, ui::stretched(&assets, frame, Color::WHITE)))
+                        .with_children(|f| {
+                            if let Some(path) = choice.icon(&loadout, &book) {
+                                f.spawn((Node { position_type: PositionType::Absolute, top: Val::Px(icon_top), width: Val::Px(icon), height: Val::Px(icon), ..default() }, ui::image(&assets, path, Color::WHITE)));
+                            }
+                        });
+                    row.spawn(Node { flex_direction: FlexDirection::Column, ..default() }).with_children(|t| {
+                        t.spawn((Text::new(head.to_string()), title.at(21.0), TextColor(if choice.is_skill() { Color::srgb(0.6, 0.85, 1.0) } else { Color::WHITE })));
+                        if !tail.is_empty() {
+                            t.spawn((Text::new(tail.to_string()), text(17.0), TextColor(TEXT)));
+                        }
+                    });
+                })
+                .observe(move |_: On<PointerClick>, mut clicked: ResMut<ClickedChoice>| clicked.0 = Some(i));
+            }
+        });
     });
 }
 
@@ -218,19 +273,17 @@ fn choose_upgrade(
     next.set(GameState::Playing);
 }
 
-fn show_loot(mut commands: Commands, offer: Res<LootOffer>, title: Res<TitleFont>) {
+fn show_loot(mut commands: Commands, assets: Res<AssetServer>, offer: Res<LootOffer>, book: Res<AffixBook>, title: Res<TitleFont>) {
     commands.spawn(panel(LootPanel)).with_children(|p| {
-        p.spawn((Text::new("Chest opened – choose an item"), title.at(36.0)));
-        p.spawn((Text::new("It goes to your stash at the end of the run; equip it in the armoury."), TextFont { font_size: FontSize::Px(18.0), ..default() }));
-        for (i, gear) in offer.0.iter().enumerate() {
-            p.spawn((
-                Node { width: Val::Px(620.0), padding: UiRect::all(Val::Px(14.0)), ..default() },
-                BackgroundColor(Color::srgb(0.18, 0.16, 0.22)),
-                children![(Text::new(format!("{}  {}", i + 1, gear.title())), TextFont { font_size: FontSize::Px(22.0), ..default() })],
-            ))
-            .observe(move |_: On<PointerClick>, mut clicked: ResMut<ClickedChoice>| clicked.0 = Some(i));
-        }
-        p.spawn((Text::new("Esc – take nothing"), TextFont { font_size: FontSize::Px(18.0), ..default() }));
+        window(p, &assets, &title, "Treasure".into(), 720.0, |w| {
+            w.spawn((Text::new("Choose one item (1–3 or click). It goes to the shared stash when the run ends."), text(17.0), TextColor(TEXT)));
+            for (i, item) in offer.0.iter().enumerate() {
+                ui::item_card(w, &assets, &title, item, &book, 660.0, Some(format!("{}  – take", i + 1)), |e| {
+                    e.observe(move |_: On<PointerClick>, mut clicked: ResMut<ClickedChoice>| clicked.0 = Some(i));
+                });
+            }
+            w.spawn((Text::new("Esc – take nothing"), text(16.0), TextColor(TEXT)));
+        });
     });
 }
 
@@ -249,30 +302,32 @@ fn choose_loot(
         return;
     }
     let Some(item) = keys_pick.or(clicked.0.take()).or(auto_pick).and_then(|i| offer.0.get(i)) else { return };
-    loot.0.push(*item);
-    info!("looted {}", item.name());
+    loot.0.push(item.clone());
+    info!("looted {} ({:?})", item.base, item.rarity);
     audio.play(super::content::sound::PICK, None, 0.9, 0.0);
     next.set(GameState::Playing);
 }
 
-fn show_end(mut commands: Commands, run: Res<Run>, reward: Res<LastReward>, title_font: Res<TitleFont>) {
-    let title = if run.won { "You survived! The Titans are impressed." } else { "You have fallen." };
-    let items = if reward.items.is_empty() { "none".to_string() } else { reward.items.join(", ") };
+fn show_end(mut commands: Commands, assets: Res<AssetServer>, run: Res<Run>, reward: Res<LastReward>, title_font: Res<TitleFont>) {
+    let title = if run.won { "Victory" } else { "You have fallen" };
     commands.spawn(panel(EndPanel)).with_children(|p| {
-        p.spawn((Text::new(title), title_font.at(44.0)));
-        p.spawn((
-            Text::new(format!(
-                "Level {}   Kills: {}   Time {:02}:{:02}\n\nActive points: +{}   Passive points: +{}   Items to the stash: {items}\n\nR – restart     M – main menu",
-                run.level,
-                run.kills,
-                run.time as u32 / 60,
-                run.time as u32 % 60,
-                reward.active,
-                reward.passive
-            )),
-            TextFont { font_size: FontSize::Px(24.0), ..default() },
-            TextLayout::justify(Justify::Center),
-        ));
+        window(p, &assets, &title_font, title.into(), 660.0, |w| {
+            if run.won {
+                w.spawn((Text::new("The Titans are impressed."), text(19.0), TextColor(TEXT)));
+            }
+            w.spawn((
+                Text::new(format!("Level {}   ·   Kills {}   ·   Time {:02}:{:02}", run.level, run.kills, run.time as u32 / 60, run.time as u32 % 60)),
+                text(22.0),
+            ));
+            w.spawn((Text::new(format!("Active points +{}   ·   Passive points +{}", reward.active, reward.passive)), text(21.0), TextColor(GOLD)));
+            if !reward.items.is_empty() {
+                w.spawn((Text::new("Items to the stash"), title_font.at(20.0)));
+                for (name, rarity) in &reward.items {
+                    w.spawn((Text::new(name.clone()), text(19.0), TextColor(rarity.color())));
+                }
+            }
+            w.spawn((Text::new("R – restart     M – main menu"), text(18.0), TextColor(TEXT), Node { margin: UiRect::top(Val::Px(8.0)), ..default() }));
+        });
     });
 }
 

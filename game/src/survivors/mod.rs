@@ -10,6 +10,7 @@ mod enemies;
 mod equipment;
 mod flowfield;
 mod hud;
+pub mod items;
 pub mod mastery_data;
 mod menu;
 mod player;
@@ -133,6 +134,8 @@ impl Plugin for SurvivorsPlugin {
             .add_plugins((camera::plugin, player::plugin, enemies::plugin, combat::plugin, progression::plugin, hud::plugin))
             .add_plugins((menu::plugin, bench::plugin, flowfield::plugin, equipment::plugin, profile::plugin))
             .add_plugins((mastery_data::plugin, abilities::plugin, skilltree::plugin))
+            .insert_resource(items::AffixBook::load(&crate::export_root()))
+            .add_systems(Update, ui::scale_to_window)
             .add_systems(Startup, skip_menu_in_tests)
             .add_systems(OnEnter(GameState::MainMenu), clear_run)
             .add_systems(Update, ((start_run, follow_ground, restart).chain(), music));
@@ -163,6 +166,7 @@ fn start_run(
     mut profile: ResMut<profile::Profile>,
     mut loot: ResMut<equipment::RunLoot>,
     book: Res<mastery_data::MasteryBook>,
+    affixes: Res<items::AffixBook>,
     entities: Query<Entity, With<RunEntity>>,
 ) {
     if requests.read().count() == 0 {
@@ -179,15 +183,17 @@ fn start_run(
     combat::reset(&mut commands);
     if !profile.created {
         // Tests (and a first start without the menu) get a staff hero.
-        *profile = profile::Profile::new_hero(&equipment::STAFF);
+        profile.new_hero(&equipment::STAFF);
     }
     let mut hp = Health { hp: config::PLAYER_HP, max: config::PLAYER_HP };
     skills::apply(&profile, &book, &mut stats, &mut hp);
     commands.insert_resource(run_loadout(&profile, &book));
-    let mut gear = profile.equipment();
+    let mut gear = profile.equipment(&affixes);
+    items::apply(&gear, &mut stats, &mut hp);
     // Test hook: TQ2_TEST_CHEST=1 drops a chest right next to the hero.
     if std::env::var_os("TQ2_TEST_CHEST").is_some() {
-        equipment::drop_chest(&mut commands, &assets, arena.start + Vec2::X);
+        let luck = std::env::var("TQ2_TEST_CHEST").ok().and_then(|v| v.parse().ok()).unwrap_or(1.0);
+        equipment::drop_chest(&mut commands, &assets, arena.start + Vec2::X, luck);
     }
     // Test hook: TQ2_TEST_GEAR=sword,shield,ranger (item ids or short names) - the first
     // weapon goes to the main hand, the next one-handed item to the off hand.
@@ -221,7 +227,13 @@ fn start_run(
     }
     let hero = player::spawn_hero(&mut commands, arena.start, gear);
     commands.entity(hero).insert(hp);
-    next.set(GameState::Playing);
+    // Test hook: TQ2_TEST_LEVELUP=1 opens the level-up window right away (screenshots).
+    if std::env::var_os("TQ2_TEST_LEVELUP").is_some() {
+        run.level = 2;
+        next.set(GameState::LevelUp);
+    } else {
+        next.set(GameState::Playing);
+    }
 }
 
 /// The run's skills: the profile's equipped skills, or TQ2_TEST_SKILLS=Ice Shards,Fissure,…

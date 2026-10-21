@@ -74,7 +74,7 @@ pub fn reset(commands: &mut Commands) {
 /// Damage of one hit (base already includes damage bonuses) and whether it crit.
 pub fn roll_damage(base: f32, stats: &HeroStats) -> (f32, bool) {
     let crit = fastrand::f32() < stats.crit;
-    (base * if crit { 2.0 } else { 1.0 }, crit)
+    (base * if crit { stats.crit_mult } else { 1.0 }, crit)
 }
 
 /// The equipped weapon's auto-attack: projectiles (staff, bow) or a melee sweep (sword).
@@ -95,7 +95,7 @@ fn auto_attack(
 ) {
     let Ok((hero_entity, hero, hero_vel, eq)) = hero.single() else { return };
     let w = eq.main;
-    let base = w.damage * stats.damage * buffs.damage();
+    let base = eq.weapon_damage() * stats.damage * buffs.damage();
     weapons.attack_timer -= time.delta_secs();
     if weapons.attack_timer > 0.0 {
         return;
@@ -240,7 +240,9 @@ fn kill_dead(
         // Elites and bosses leave a chest with gear to choose from.
         if enemy.elite || enemy.boss {
             info!("chest dropped at {:.0} s", run.time);
-            drop_chest(&mut commands, &assets, pos.0);
+            // Bosses drop better chests, and loot improves over the run.
+            let luck = if enemy.boss { 2.5 } else { 1.3 } * (1.0 + run.time / 600.0);
+            drop_chest(&mut commands, &assets, pos.0, luck);
         }
         let shards = if enemy.boss { 10 } else { 1 };
         for i in 0..shards {

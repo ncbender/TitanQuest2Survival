@@ -385,6 +385,11 @@ fn drive_upper_body(
     let started: HashMap<Entity, &UpperBodyAction> = started.iter().collect();
     for (entity, of, mut player, releasing) in &mut players {
         let Some(graph) = library.0.get(&of.path).and_then(|p| p.graph.as_ref()) else { continue };
+        // Only rigged characters (the hero) have action nodes.
+        if graph.durations.is_empty() {
+            continue;
+        }
+        let had = releasing.is_some();
         let mut release = releasing.map(|r| std::mem::take(&mut r.into_inner().0)).unwrap_or_default();
         if let Some(action) = started.get(&of.root) {
             let nodes = if action.full_body { &graph.full } else { &graph.upper };
@@ -420,7 +425,9 @@ fn drive_upper_body(
             player.stop(node);
             release.remove(&node);
         }
-        commands.entity(entity).insert(Releasing(release));
+        if had || !release.is_empty() {
+            commands.entity(entity).insert(Releasing(release));
+        }
     }
 }
 

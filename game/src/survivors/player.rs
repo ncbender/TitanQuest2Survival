@@ -36,6 +36,10 @@ pub struct HeroStats {
     pub ailment: f32,
     /// Multiplier for collected experience.
     pub xp: f32,
+    /// Damage multiplier of critical hits.
+    pub crit_mult: f32,
+    /// Damage dealt back to an enemy that hits the hero.
+    pub retaliation: f32,
 }
 
 impl Default for HeroStats {
@@ -55,6 +59,8 @@ impl Default for HeroStats {
             regen: 0.0,
             ailment: 0.0,
             xp: 1.0,
+            crit_mult: 2.0,
+            retaliation: 0.0,
         }
     }
 }

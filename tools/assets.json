@@ -217,7 +217,17 @@
       "t_2-4_slot_2h_axe_",
       "t_2-3_slot_medium",
       "t_frame_embers",
-      "t_frame_embers_locked"
+      "t_frame_embers_locked",
+      "t_icon_mod_increase-damage-weapon01",
+      "t_icon_mod__increase-attack-speed01",
+      "t_icon_mod_increase-damage-projectile01",
+      "t_icon_simple_critchance01",
+      "t_icon_attribute_agility01",
+      "t_icon_simple_totaldamage01",
+      "t_icon_mod_healthincrease01",
+      "t_icon_simple_ailmentchance01",
+      "t_icon_attribute_cunning01",
+      "t_frame_flat_headline"
     ],
     "items": [
       "t_icon_weapon_weapon_staff2h_fotia",

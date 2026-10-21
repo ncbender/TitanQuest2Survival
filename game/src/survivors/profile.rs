@@ -1,26 +1,28 @@
-//! The persistent hero (meta progression): the stash of found gear, the loadout chosen in
-//! the armoury, the chosen TQ2 masteries with learned skills and passives, and unspent active
-//! and passive points. Saved as JSON in `save/profile.json` in the project folder
-//! (git-ignored). Gear and skills only change between runs; at the end of a run the picked
-//! chest items go to the stash and the run's points are credited.
+//! The save: a stash of rolled items shared by all characters, and the characters themselves,
+//! each with its own TQ2 masteries, learned skills and passives, unspent points and loadout
+//! (worn items by id; an item can only be worn by one character at a time). Saved as JSON in
+//! `save/profile.json` in the project folder (git-ignored). Gear and skills only change between
+//! runs; at the end of a run the picked chest items go to the shared stash and the run's points
+//! to the character that played it.
+//!
+//! `Profile` dereferences to the active character, so `profile.masteries` etc. read and write
+//! the character being played.
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
 
-use super::equipment::{Equipment, Item, OffHand, RunLoot, ADVENTURER, STAFF, WeaponDef};
+use super::equipment::{Equipment, Item, OffHand, RunLoot, ADVENTURER, WeaponDef};
+use super::items::{AffixBook, ItemInstance};
 use super::{GameState, Run};
 
-#[derive(Resource, Serialize, Deserialize, Clone, Default)]
+#[derive(Serialize, Deserialize, Clone, Default)]
 #[serde(default)]
-pub struct Profile {
-    /// False until character creation; nothing is saved before that.
+pub struct Character {
+    /// False only for the placeholder used while no character exists.
     pub created: bool,
-    /// Item ids, one entry per copy (two copies of a sword allow dual wielding it).
-    pub stash: Vec<String>,
-    pub main: String,
-    pub off: Option<String>,
-    pub armor: String,
+    pub name: String,
     /// Chosen TQ2 masteries (ids like "storm"), at most two.
     pub masteries: Vec<String>,
     /// Unspent points (TQ2 has separate points for skills and passives).
@@ -32,13 +34,70 @@ pub struct Profile {
     pub passives: BTreeMap<String, u32>,
     /// Learned skills that cast themselves during runs.
     pub equipped: Vec<String>,
+    /// Worn items (stash ids).
+    pub main: Option<u64>,
+    pub off: Option<u64>,
+    pub armor: Option<u64>,
     pub runs: u32,
     pub best_time: f32,
-    /// Placeholder skill tree of earlier versions; converted to passive points on load.
-    #[serde(skip_serializing)]
-    pub favor: u32,
-    #[serde(skip_serializing)]
-    pub skills: BTreeMap<String, u32>,
+}
+
+static NO_CHARACTER: Character = Character {
+    created: false,
+    name: String::new(),
+    masteries: Vec::new(),
+    active_points: 0,
+    passive_points: 0,
+    actives: BTreeMap::new(),
+    passives: BTreeMap::new(),
+    equipped: Vec::new(),
+    main: None,
+    off: None,
+    armor: None,
+    runs: 0,
+    best_time: 0.0,
+};
+
+impl Character {
+    pub fn active_level(&self, id: &str) -> u32 {
+        self.actives.get(id).copied().unwrap_or(0)
+    }
+
+    pub fn passive_level(&self, id: &str) -> u32 {
+        self.passives.get(id).copied().unwrap_or(0)
+    }
+
+    fn worn(&self) -> [Option<u64>; 3] {
+        [self.main, self.off, self.armor]
+    }
+}
+
+#[derive(Resource, Serialize, Deserialize, Clone, Default)]
+#[serde(default)]
+pub struct Profile {
+    /// Items of all characters.
+    pub stash: Vec<ItemInstance>,
+    pub characters: Vec<Character>,
+    /// Index of the character being played.
+    pub active: usize,
+    pub next_uid: u64,
+}
+
+impl Deref for Profile {
+    type Target = Character;
+    fn deref(&self) -> &Character {
+        self.characters.get(self.active).unwrap_or(&NO_CHARACTER)
+    }
+}
+
+impl DerefMut for Profile {
+    fn deref_mut(&mut self) -> &mut Character {
+        if self.characters.is_empty() {
+            self.characters.push(Character::default());
+        }
+        self.active = self.active.min(self.characters.len() - 1);
+        &mut self.characters[self.active]
+    }
 }
 
 /// Where the profile is saved; test runs use a separate file so they never touch the real one.
@@ -50,92 +109,160 @@ struct ProfilePath(PathBuf);
 pub struct LastReward {
     pub active: u32,
     pub passive: u32,
-    pub items: Vec<&'static str>,
+    pub items: Vec<(String, super::items::Rarity)>,
 }
 
+/// Greek names for new heroes.
+const NAMES: &[&str] = &["Leander", "Kallias", "Theron", "Nikias", "Lysander", "Damon", "Orestes", "Alkaios", "Phaidon", "Ione", "Kassia", "Thalia"];
+
 impl Profile {
-    pub fn new_hero(weapon: &'static WeaponDef) -> Self {
-        Self {
-            created: true,
-            stash: vec![weapon.id.into(), ADVENTURER.id.into()],
-            main: weapon.id.into(),
-            armor: ADVENTURER.id.into(),
-            ..default()
+    pub fn new_uid(&mut self) -> u64 {
+        self.next_uid += 1;
+        self.next_uid
+    }
+
+    /// Adds a new character (starting weapon and adventurer's garb go to the stash) and plays it.
+    pub fn new_hero(&mut self, weapon: &'static WeaponDef) {
+        let name = NAMES.iter().find(|n| !self.characters.iter().any(|c| c.name == **n)).map_or_else(|| format!("Hero {}", self.characters.len() + 1), |n| n.to_string());
+        let w = self.new_uid();
+        let a = self.new_uid();
+        self.stash.push(ItemInstance::plain(w, Item::Weapon(weapon)));
+        self.stash.push(ItemInstance::plain(a, Item::Armor(&ADVENTURER)));
+        self.characters.push(Character { created: true, name, main: Some(w), armor: Some(a), ..default() });
+        self.active = self.characters.len() - 1;
+    }
+
+    /// Removes a character; its items stay in the stash.
+    pub fn delete_character(&mut self, index: usize) {
+        if index < self.characters.len() {
+            self.characters.remove(index);
+            self.active = self.active.min(self.characters.len().saturating_sub(1));
         }
     }
 
-    pub fn copies(&self, item: Item) -> usize {
-        self.stash.iter().filter(|id| *id == item.id()).count()
+    pub fn item(&self, uid: u64) -> Option<&ItemInstance> {
+        self.stash.iter().find(|i| i.uid == uid)
     }
 
-    /// The saved loadout; anything unknown or missing from the stash falls back to defaults.
-    pub fn equipment(&self) -> Equipment {
+    /// The character (index) wearing an item.
+    pub fn worn_by(&self, uid: u64) -> Option<usize> {
+        self.characters.iter().position(|c| c.worn().contains(&Some(uid)))
+    }
+
+    /// The active character's loadout with quality rolls and affix bonuses.
+    pub fn equipment(&self, book: &AffixBook) -> Equipment {
         let mut eq = Equipment::default();
-        if let Some(Item::Weapon(w)) = Item::from_id(&self.main) {
+        let get = |uid: Option<u64>| uid.and_then(|u| self.item(u)).and_then(|i| Some((i, i.item()?)));
+        if let Some((inst, Item::Weapon(w))) = get(self.main) {
             eq.equip_main(w);
-        } else if let Some(w) = self.stash.iter().find_map(|id| match Item::from_id(id) {
-            Some(Item::Weapon(w)) => Some(w),
-            _ => None,
-        }) {
-            eq.equip_main(w);
-        } else {
-            eq.equip_main(&STAFF);
+            eq.main_quality = inst.quality;
+            inst.add_to(&mut eq.bonus, book);
         }
-        if let Some(Item::Armor(a)) = Item::from_id(&self.armor) {
+        if let Some((inst, Item::Armor(a))) = get(self.armor) {
             eq.armor = a;
+            eq.armor_quality = inst.quality;
+            inst.add_to(&mut eq.bonus, book);
         }
-        if let Some(off) = self.off.as_deref().and_then(Item::from_id).and_then(OffHand::from_item) {
-            // A second copy is needed to dual-wield the same sword.
-            let needed = if off.item().same(Item::Weapon(eq.main)) { 2 } else { 1 };
-            if self.copies(off.item()) >= needed {
-                eq.equip_off(Some(off));
+        if let Some((inst, item)) = get(self.off) {
+            if eq.equip_off(OffHand::from_item(item)) {
+                eq.off_quality = inst.quality;
+                inst.add_to(&mut eq.bonus, book);
             }
         }
         eq
     }
 
-    pub fn set_equipment(&mut self, eq: &Equipment) {
-        self.main = eq.main.id.into();
-        self.off = eq.off.map(|o| o.item().id().into());
-        self.armor = eq.armor.id.into();
-    }
-
-    /// Copies of `item` not worn in a slot other than `except`.
-    pub fn free_copies(&self, item: Item, eq: &Equipment, except: Slot) -> usize {
-        let worn = [
-            (Slot::Main, Some(Item::Weapon(eq.main))),
-            (Slot::Off, eq.off.map(OffHand::item)),
-            (Slot::Armor, Some(Item::Armor(eq.armor))),
-        ]
-        .into_iter()
-        .filter(|(slot, worn)| *slot != except && worn.is_some_and(|w| w.same(item)))
-        .count();
-        self.copies(item).saturating_sub(worn)
-    }
-
-    pub fn active_level(&self, id: &str) -> u32 {
-        self.actives.get(id).copied().unwrap_or(0)
-    }
-
-    pub fn passive_level(&self, id: &str) -> u32 {
-        self.passives.get(id).copied().unwrap_or(0)
-    }
-
-    /// Brings profiles of earlier versions up to date: renamed item ids, and the placeholder
-    /// skill tree converted into passive points.
-    fn migrate(&mut self) {
-        let current = |id: &str| Item::from_id(id).map_or(id.to_string(), |i| i.id().to_string());
-        self.stash = self.stash.iter().map(|id| current(id)).collect();
-        self.main = current(&self.main);
-        self.armor = current(&self.armor);
-        self.off = self.off.as_deref().map(current);
-        let spent: u32 = self.skills.values().sum();
-        if self.favor + spent > 0 {
-            self.passive_points += self.favor + spent;
-            self.active_points += 1;
-            self.favor = 0;
-            self.skills.clear();
+    /// Puts a stash item into a slot of the active character (None empties the slot).
+    pub fn equip(&mut self, slot: Slot, uid: Option<u64>) -> Result<(), String> {
+        let item = match uid {
+            Some(u) => {
+                let inst = self.item(u).ok_or("unknown item")?;
+                let item = inst.item().ok_or("unknown item base")?;
+                if !slot.fits(item) {
+                    return Err("does not fit this slot".into());
+                }
+                if let Some(other) = self.worn_by(u).filter(|o| *o != self.active) {
+                    return Err(format!("worn by {}", self.characters[other].name));
+                }
+                Some(item)
+            }
+            None if slot == Slot::Main => return Err("a weapon is needed".into()),
+            None => None,
+        };
+        let main_two_handed = |p: &Profile| p.main.and_then(|u| p.item(u)).and_then(|i| i.item()).is_some_and(|i| matches!(i, Item::Weapon(w) if w.two_handed));
+        let c: &mut Character = self;
+        // Take the item out of whatever slot of this character held it.
+        for s in [&mut c.main, &mut c.off, &mut c.armor] {
+            if uid.is_some() && *s == uid {
+                *s = None;
+            }
         }
+        match slot {
+            Slot::Main => {
+                c.main = uid;
+                if matches!(item, Some(Item::Weapon(w)) if w.two_handed) {
+                    c.off = None;
+                }
+            }
+            Slot::Off => {
+                if uid.is_some() && main_two_handed(self) {
+                    return Err("a two-handed weapon needs both hands".into());
+                }
+                self.off = uid;
+            }
+            Slot::Armor => self.armor = uid,
+        }
+        // The main hand must never be empty.
+        if self.main.is_none() {
+            let weapon = self.stash.iter().find(|i| matches!(i.item(), Some(Item::Weapon(_))) && self.worn_by(i.uid).is_none()).map(|i| i.uid);
+            self.main = weapon;
+        }
+        Ok(())
+    }
+
+    /// Converts saves of earlier versions (one hero, items as id strings) to this format.
+    fn from_legacy(v: &serde_json::Value) -> Profile {
+        let mut p = Profile::default();
+        let s = |k: &str| v.get(k).and_then(|x| x.as_str()).map(str::to_string);
+        if !v.get("created").and_then(|x| x.as_bool()).unwrap_or(false) {
+            return p;
+        }
+        // Old item fields were ids as text; they are converted below, not deserialised.
+        let mut fields = v.clone();
+        if let Some(o) = fields.as_object_mut() {
+            for k in ["main", "off", "armor", "stash"] {
+                o.remove(k);
+            }
+        }
+        let mut c: Character = serde_json::from_value(fields).unwrap_or_default();
+        c.created = true;
+        c.name = NAMES[0].into();
+        let (main, off, armor) = (s("main"), s("off"), s("armor"));
+        let (mut wm, mut wo, mut wa) = (None, None, None);
+        for id in v.get("stash").and_then(|x| x.as_array()).into_iter().flatten().filter_map(|x| x.as_str()) {
+            let Some(item) = Item::from_id(id) else { continue };
+            let uid = p.new_uid();
+            p.stash.push(ItemInstance::plain(uid, item));
+            let canonical = Some(item.id().to_string());
+            let same = |x: &Option<String>| x.as_deref().and_then(Item::from_id).map(|i| i.id().to_string()) == canonical;
+            if wm.is_none() && same(&main) {
+                wm = Some(uid);
+            } else if wo.is_none() && same(&off) {
+                wo = Some(uid);
+            } else if wa.is_none() && same(&armor) {
+                wa = Some(uid);
+            }
+        }
+        (c.main, c.off, c.armor) = (wm, wo, wa);
+        // The placeholder skill tree of the first versions becomes passive points.
+        let favor = v.get("favor").and_then(|x| x.as_u64()).unwrap_or(0) as u32;
+        let spent: u32 = v.get("skills").and_then(|x| x.as_object()).map_or(0, |m| m.values().filter_map(|x| x.as_u64()).sum::<u64>() as u32);
+        if favor + spent > 0 {
+            c.passive_points += favor + spent;
+            c.active_points += 1;
+        }
+        p.characters.push(c);
+        p
     }
 }
 
@@ -169,9 +296,8 @@ pub fn points_for(run: &Run) -> (u32, u32) {
 
 pub fn plugin(app: &mut App) {
     let path = profile_path();
-    let mut profile = load(&path);
-    profile.migrate();
-    info!("profile {}", path.display());
+    let profile = load(&path);
+    info!("profile {} ({} characters, {} items)", path.display(), profile.characters.len(), profile.stash.len());
     app.insert_resource(profile)
         .insert_resource(ProfilePath(path))
         .init_resource::<LastReward>()
@@ -192,12 +318,19 @@ fn profile_path() -> PathBuf {
     dir.join(if super::is_test_run() { "test_profile.json" } else { "profile.json" })
 }
 
-/// Reads the profile; a file that does not parse is kept as `*.bad` instead of being
-/// overwritten by the next save.
+/// Reads the profile (converting old formats); a file that does not parse is kept as `*.bad`
+/// instead of being overwritten by the next save.
 fn load(path: &std::path::Path) -> Profile {
     let Ok(text) = std::fs::read_to_string(path) else { return Profile::default() };
     // Editors (and PowerShell 5) may write a UTF-8 byte order mark.
-    match serde_json::from_str::<Profile>(text.trim_start_matches('\u{feff}')) {
+    let parsed = serde_json::from_str::<serde_json::Value>(text.trim_start_matches('\u{feff}')).and_then(|v| {
+        if v.get("characters").is_some() {
+            serde_json::from_value::<Profile>(v)
+        } else {
+            Ok(Profile::from_legacy(&v))
+        }
+    });
+    match parsed {
         Ok(profile) => profile,
         Err(e) => {
             let backup = path.with_extension("json.bad");
@@ -209,7 +342,7 @@ fn load(path: &std::path::Path) -> Profile {
 }
 
 fn save(profile: Res<Profile>, path: Res<ProfilePath>) {
-    if !profile.created {
+    if profile.characters.is_empty() && profile.stash.is_empty() {
         return;
     }
     let write = || -> std::io::Result<()> {
@@ -226,17 +359,24 @@ fn save(profile: Res<Profile>, path: Res<ProfilePath>) {
     }
 }
 
-/// Credits a finished (or abandoned) run once: loot to the stash, favour to spend.
-pub fn bank_run(mut run: ResMut<Run>, mut loot: ResMut<RunLoot>, mut profile: ResMut<Profile>, mut reward: ResMut<LastReward>) {
+/// Credits a finished (or abandoned) run once: loot to the shared stash, points to the hero.
+pub fn bank_run(
+    mut run: ResMut<Run>,
+    mut loot: ResMut<RunLoot>,
+    mut profile: ResMut<Profile>,
+    mut reward: ResMut<LastReward>,
+    book: Res<AffixBook>,
+) {
     if run.banked || run.level == 0 {
         return;
     }
     run.banked = true;
     let (active, passive) = points_for(&run);
     let mut items = vec![];
-    for item in loot.0.drain(..) {
-        profile.stash.push(item.id().into());
-        items.push(item.name());
+    for mut item in loot.0.drain(..) {
+        item.uid = profile.new_uid();
+        items.push((item.name(&book), item.rarity));
+        profile.stash.push(item);
     }
     profile.active_points += active;
     profile.passive_points += passive;
@@ -249,26 +389,42 @@ pub fn bank_run(mut run: ResMut<Run>, mut loot: ResMut<RunLoot>, mut profile: Re
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::survivors::equipment::{AENEAS_SHIELD, PELEUS, SWORD};
+    use crate::survivors::equipment::{AENEAS_SHIELD, AXE, PELEUS, SWORD};
 
-    #[test]
-    fn dual_wielding_one_sword_needs_two_copies() {
-        let mut p = Profile::new_hero(&SWORD);
-        p.off = Some(SWORD.id.into());
-        assert!(p.equipment().off.is_none());
-        p.stash.push(SWORD.id.into());
-        assert!(p.equipment().off.is_some());
+    fn add(p: &mut Profile, item: Item) -> u64 {
+        let uid = p.new_uid();
+        p.stash.push(ItemInstance::plain(uid, item));
+        uid
     }
 
     #[test]
-    fn loadout_round_trip() {
-        let mut p = Profile::new_hero(&PELEUS);
-        p.stash.push(AENEAS_SHIELD.id.into());
-        let mut eq = p.equipment();
-        eq.equip_off(Some(OffHand::Shield(&AENEAS_SHIELD)));
-        p.set_equipment(&eq);
-        let back = p.equipment();
-        assert!(back.off.is_some() && back.main.id == PELEUS.id);
+    fn characters_share_the_stash_but_not_worn_items() {
+        let mut p = Profile::default();
+        p.new_hero(&SWORD);
+        let shield = add(&mut p, Item::Shield(&AENEAS_SHIELD));
+        p.equip(Slot::Off, Some(shield)).unwrap();
+        p.masteries.push("storm".into());
+        p.new_hero(&PELEUS);
+        assert_eq!(p.characters.len(), 2);
+        assert!(p.masteries.is_empty(), "masteries belong to the character");
+        assert!(p.equip(Slot::Off, Some(shield)).unwrap_err().contains("worn by"));
+        p.active = 0;
+        p.equip(Slot::Off, None).unwrap();
+        p.active = 1;
+        p.equip(Slot::Off, Some(shield)).unwrap();
+        assert!(p.equipment(&AffixBook::default()).off.is_some());
+    }
+
+    #[test]
+    fn two_handed_main_empties_the_off_hand() {
+        let mut p = Profile::default();
+        p.new_hero(&SWORD);
+        let shield = add(&mut p, Item::Shield(&AENEAS_SHIELD));
+        let axe = add(&mut p, Item::Weapon(&AXE));
+        p.equip(Slot::Off, Some(shield)).unwrap();
+        p.equip(Slot::Main, Some(axe)).unwrap();
+        assert!(p.off.is_none());
+        assert!(p.equip(Slot::Off, Some(shield)).is_err());
     }
 
     #[test]
@@ -278,18 +434,18 @@ mod tests {
     }
 
     #[test]
-    fn renamed_items_are_migrated() {
-        let mut p: Profile = serde_json::from_str(r#"{"created":true,"stash":["staff_of_apollo","shield_of_heracles"],"main":"staff_of_apollo","off":"shield_of_heracles"}"#).unwrap();
-        p.migrate();
-        assert_eq!(p.stash, vec!["fotia".to_string(), "shield_of_aeneas".to_string()]);
-        assert_eq!(p.main, "fotia");
-        assert_eq!(p.copies(Item::Shield(&crate::survivors::equipment::AENEAS_SHIELD)), 1);
-    }
-
-    #[test]
-    fn old_placeholder_tree_becomes_points() {
-        let mut p: Profile = serde_json::from_str(r#"{"created":true,"favor":3,"skills":{"might":2}}"#).unwrap();
-        p.migrate();
-        assert_eq!((p.passive_points, p.active_points, p.favor), (5, 1, 0));
+    fn legacy_save_is_converted() {
+        let v: serde_json::Value = serde_json::from_str(
+            r#"{"created":true,"stash":["staff_of_apollo","shield_of_heracles","battlemage_sword"],"main":"battlemage_sword","off":"shield_of_heracles","armor":"adventurer","masteries":["storm"],"favor":3,"skills":{"might":2}}"#,
+        )
+        .unwrap();
+        let p = Profile::from_legacy(&v);
+        assert_eq!(p.characters.len(), 1);
+        assert_eq!(p.stash.len(), 3);
+        assert_eq!(p.masteries, vec!["storm".to_string()]);
+        assert_eq!((p.passive_points, p.active_points), (5, 1));
+        let eq = p.equipment(&AffixBook::default());
+        assert_eq!(eq.main.id, SWORD.id);
+        assert!(eq.off.is_some());
     }
 }

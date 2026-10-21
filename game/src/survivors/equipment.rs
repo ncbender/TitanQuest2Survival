@@ -305,20 +305,6 @@ impl Item {
             Item::Armor(a) => a.name,
         }
     }
-
-    /// One line for menus: kind and what it does.
-    pub fn title(self) -> String {
-        match self {
-            Item::Weapon(w) => format!("{} ({}) – {}", w.name, if w.two_handed { "two-handed" } else { "one-handed" }, w.attack_text()),
-            Item::Shield(s) => format!("{} (shield) – blocks {:.0} % of damage", s.name, s.block * 100.0),
-            Item::Talisman(t) => format!("{} (talisman) – +{:.0} % skill damage", t.name, t.skill_damage * 100.0),
-            Item::Armor(a) => format!("{} (armour) – {:.0} % less damage taken", a.name, a.armor * 100.0),
-        }
-    }
-
-    pub fn same(self, other: Item) -> bool {
-        self.id() == other.id()
-    }
 }
 
 impl WeaponDef {
@@ -341,14 +327,6 @@ pub enum OffHand {
 }
 
 impl OffHand {
-    pub fn item(self) -> Item {
-        match self {
-            OffHand::Weapon(w) => Item::Weapon(w),
-            OffHand::Shield(s) => Item::Shield(s),
-            OffHand::Talisman(t) => Item::Talisman(t),
-        }
-    }
-
     pub fn from_item(item: Item) -> Option<OffHand> {
         match item {
             Item::Weapon(w) if !w.two_handed => Some(OffHand::Weapon(w)),
@@ -368,11 +346,17 @@ pub struct Equipment {
     pub main: &'static WeaponDef,
     pub off: Option<OffHand>,
     pub armor: &'static ArmorDef,
+    /// Quality rolls of the worn items (base value multipliers, see items.rs).
+    pub main_quality: f32,
+    pub off_quality: f32,
+    pub armor_quality: f32,
+    /// Sum of the worn items' affixes.
+    pub bonus: super::items::Bonus,
 }
 
 impl Default for Equipment {
     fn default() -> Self {
-        Self { main: &STAFF, off: None, armor: &ADVENTURER }
+        Self { main: &STAFF, off: None, armor: &ADVENTURER, main_quality: 1.0, off_quality: 1.0, armor_quality: 1.0, bonus: default() }
     }
 }
 
@@ -410,19 +394,24 @@ impl Equipment {
         self.main.cooldown * if dual { DUAL_WIELD_COOLDOWN } else { 1.0 }
     }
 
-    /// Fraction of enemy damage absorbed by armour and shield.
+    /// Fraction of enemy damage absorbed by armour, shield and resistance affixes.
     pub fn damage_reduction(&self) -> f32 {
         let block = match self.off {
-            Some(OffHand::Shield(s)) => s.block,
+            Some(OffHand::Shield(s)) => s.block * self.off_quality,
             _ => 0.0,
         };
-        (self.armor.armor + block).min(0.75)
+        (self.armor.armor * self.armor_quality + block + self.bonus.reduction).min(0.75)
+    }
+
+    /// Damage of one weapon hit before damage bonuses: base × quality + flat affix damage.
+    pub fn weapon_damage(&self) -> f32 {
+        self.main.damage * self.main_quality + self.bonus.flat_damage
     }
 
     /// Multiplier for skill damage (talisman).
     pub fn skill_damage(&self) -> f32 {
         match self.off {
-            Some(OffHand::Talisman(t)) => 1.0 + t.skill_damage,
+            Some(OffHand::Talisman(t)) => 1.0 + t.skill_damage * self.off_quality,
             _ => 1.0,
         }
     }
@@ -446,17 +435,19 @@ impl Equipment {
     }
 }
 
-/// A chest on the ground (TQ2 Greek chest).
+/// A chest on the ground (TQ2 Greek chest); `luck` raises the rarity of its items.
 #[derive(Component)]
-pub struct LootChest;
+pub struct LootChest {
+    pub luck: f32,
+}
 
 /// The items offered by the chest being opened.
 #[derive(Resource, Default)]
-pub struct LootOffer(pub Vec<Item>);
+pub struct LootOffer(pub Vec<super::items::ItemInstance>);
 
 /// Items picked from chests during this run; they go to the stash when the run ends.
 #[derive(Resource, Default)]
-pub struct RunLoot(pub Vec<Item>);
+pub struct RunLoot(pub Vec<super::items::ItemInstance>);
 
 pub fn plugin(app: &mut App) {
     app.init_resource::<LootOffer>()
@@ -472,9 +463,9 @@ fn apply_equipment(mut commands: Commands, changed: Query<(Entity, &Equipment), 
     }
 }
 
-pub fn drop_chest(commands: &mut Commands, assets: &AssetServer, at: Vec2) {
+pub fn drop_chest(commands: &mut Commands, assets: &AssetServer, at: Vec2, luck: f32) {
     commands.spawn((
-        LootChest,
+        LootChest { luck },
         RunEntity,
         Pos(at),
         WorldAssetRoot(assets.load(GltfAssetLabel::Scene(0).from_asset(CHEST))),
@@ -488,22 +479,22 @@ fn place_chests(ground: Res<Ground>, mut chests: Query<(&Pos, &mut Transform), (
     }
 }
 
-/// Walking into a chest opens it: three random items to choose one from.
+/// Walking into a chest opens it: three rolled items (rarity by the chest's luck) to choose
+/// one from.
 fn open_chests(
     mut commands: Commands,
     mut offer: ResMut<LootOffer>,
     mut next: ResMut<NextState<GameState>>,
+    book: Res<super::items::AffixBook>,
     hero: Query<&Pos, With<Hero>>,
-    chests: Query<(Entity, &Pos), With<LootChest>>,
+    chests: Query<(Entity, &Pos, &LootChest)>,
 ) {
     let Ok(hero) = hero.single() else { return };
-    let Some((chest, _)) = chests.iter().find(|(_, p)| p.0.distance(hero.0) < 1.6) else { return };
+    let Some((chest, _, c)) = chests.iter().find(|(_, p, _)| p.0.distance(hero.0) < 1.6) else { return };
     commands.entity(chest).despawn();
-    let mut pool = ITEMS.to_vec();
-    fastrand::shuffle(&mut pool);
-    pool.truncate(3);
-    info!("chest offers: {:?}", pool.iter().map(|i| i.name()).collect::<Vec<_>>());
-    offer.0 = pool;
+    // Uids are assigned when the run is banked.
+    offer.0 = (0..3).map(|_| super::items::roll_loot(0, c.luck, &book)).collect();
+    info!("chest offers: {:?}", offer.0.iter().map(|i| format!("{} ({:?})", i.name(&book), i.rarity)).collect::<Vec<_>>());
     next.set(GameState::Loot);
 }
 
@@ -513,7 +504,7 @@ mod tests {
 
     #[test]
     fn two_handed_empties_off_hand() {
-        let mut eq = Equipment { main: &SWORD, off: Some(OffHand::Shield(&AENEAS_SHIELD)), armor: &ADVENTURER };
+        let mut eq = Equipment { main: &SWORD, off: Some(OffHand::Shield(&AENEAS_SHIELD)), ..default() };
         eq.equip_main(&AXE);
         assert!(eq.off.is_none());
         assert!(!eq.equip_off(Some(OffHand::Talisman(&ARCANE_MIRROR))));
@@ -532,7 +523,7 @@ mod tests {
     #[test]
     fn item_ids_are_unique() {
         for (i, a) in ITEMS.iter().enumerate() {
-            assert!(ITEMS[i + 1..].iter().all(|b| !a.same(*b)), "{}", a.id());
+            assert!(ITEMS[i + 1..].iter().all(|b| a.id() != b.id()), "{}", a.id());
             assert!(Item::from_id(a.id()).is_some());
         }
     }

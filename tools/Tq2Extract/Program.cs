@@ -62,6 +62,11 @@ switch (command)
             }
         break;
 
+    case "affixes":
+        // affixes: TQ2 item prefixes/suffixes (names, texts, drop weights per slot)
+        Affixes.Run(provider, cache);
+        break;
+
     case "masteries":
         // masteries: skill-tree data (tiers, skills, passives, modifiers, texts, icons)
         Masteries.Run(provider, cache);

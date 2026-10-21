@@ -89,3 +89,71 @@ pub fn rich(parent: &mut ChildSpawnerCommands, spans: Vec<(String, Color)>, size
 pub fn roman(n: usize) -> &'static str {
     ["I", "II", "III", "IV", "V", "VI"].get(n).copied().unwrap_or("?")
 }
+
+/// An item in TQ2 style: icon in a gold frame on a rarity-tinted backdrop, name in the rarity
+/// colour, rarity and base value, affix lines. `setup` can attach observers to the card.
+pub fn item_card(
+    parent: &mut ChildSpawnerCommands,
+    assets: &AssetServer,
+    title: &crate::fonts::TitleFont,
+    inst: &super::items::ItemInstance,
+    book: &super::items::AffixBook,
+    width: f32,
+    note: Option<String>,
+    setup: impl FnOnce(&mut EntityCommands),
+) {
+    let color = inst.rarity.color();
+    let kind = inst.item().map_or("", |i| match i {
+        super::equipment::Item::Weapon(w) if w.two_handed => "Two-handed weapon",
+        super::equipment::Item::Weapon(_) => "One-handed weapon",
+        super::equipment::Item::Shield(_) => "Shield",
+        super::equipment::Item::Talisman(_) => "Talisman",
+        super::equipment::Item::Armor(_) => "Armour",
+    });
+    let mut card = parent.spawn((
+        Node {
+            width: Val::Px(width),
+            padding: UiRect::all(Val::Px(8.0)),
+            column_gap: Val::Px(12.0),
+            align_items: AlignItems::FlexStart,
+            border: UiRect::all(Val::Px(1.0)),
+            ..default()
+        },
+        BackgroundColor(Color::srgba(0.07, 0.065, 0.06, 0.92)),
+        BorderColor::all(color.with_alpha(0.6)),
+    ));
+    card.with_children(|c| {
+        c.spawn((
+            Node { width: Val::Px(64.0), height: Val::Px(64.0), padding: UiRect::all(Val::Px(6.0)), flex_shrink: 0.0, ..default() },
+            BackgroundColor(color.with_alpha(0.18)),
+            sliced(assets, "t_frame_gold_small05", 8.0, Color::WHITE),
+        ))
+        .with_children(|f| {
+            if let Some(item) = inst.item() {
+                f.spawn((Node { width: Val::Percent(100.0), height: Val::Percent(100.0), ..default() }, ImageNode { image_mode: NodeImageMode::Auto, ..ImageNode::new(assets.load(item.icon())) }));
+            }
+        });
+        c.spawn(Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(2.0), flex_grow: 1.0, ..default() }).with_children(|t| {
+            t.spawn((Text::new(inst.name(book)), title.at(20.0), TextColor(color)));
+            t.spawn((Text::new(format!("{} {kind} · {}", inst.rarity.name(), inst.base_line())), text(15.0), TextColor(TEXT)));
+            for line in inst.lines(book) {
+                rich(t, line, 15.0, Val::Auto);
+            }
+            if let Some(note) = note {
+                t.spawn((Text::new(note), text(14.0), TextColor(super::mastery_data::GOLD)));
+            }
+        });
+    });
+    setup(&mut card);
+}
+
+/// Menus and HUD are laid out on a 1280×720 canvas; scale the whole UI to the actual window so
+/// it looks the same at any resolution and Windows display scaling.
+pub fn scale_to_window(windows: Query<&Window, Changed<Window>>, mut scale: ResMut<UiScale>) {
+    if let Ok(window) = windows.single() {
+        let s = (window.height() / 720.0).clamp(0.5, 4.0);
+        if (scale.0 - s).abs() > 0.001 {
+            scale.0 = s;
+        }
+    }
+}

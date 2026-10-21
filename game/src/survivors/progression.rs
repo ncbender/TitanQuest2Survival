@@ -114,6 +114,35 @@ impl Choice {
         }
     }
 
+    /// TQ2 icon (below the asset root): the skill's or modifier's icon, or a stat icon.
+    pub fn icon(&self, loadout: &Loadout, book: &MasteryBook) -> Option<String> {
+        use super::mastery_data::{texture, ui_texture};
+        let skill = |i: &usize| book.active(loadout.0[*i].spec.id).map(|(_, _, s)| s);
+        match self {
+            Choice::Stat(u) => Some(ui_texture(match u {
+                Upgrade::Damage => "t_icon_mod_increase-damage-weapon01",
+                Upgrade::AttackSpeed => "t_icon_mod__increase-attack-speed01",
+                Upgrade::Multishot => "t_icon_mod_increase-damage-projectile01",
+                Upgrade::Pierce => "t_icon_attribute_cunning01",
+                Upgrade::MoveSpeed => "t_icon_attribute_agility01",
+                Upgrade::Area => "t_icon_simple_totaldamage01",
+                Upgrade::Crit => "t_icon_simple_critchance01",
+                Upgrade::Vitality => "t_icon_mod_healthincrease01",
+                Upgrade::Magnet => "t_icon_simple_ailmentchance01",
+            })),
+            Choice::SkillLevel(i) => skill(i).and_then(|s| s.icon.as_deref()).map(texture),
+            Choice::Modifier(i, m) => {
+                let s = skill(i)?;
+                book.modifiers(s).find(|x| x.name == m.name).and_then(|x| x.icon.as_deref()).or(s.icon.as_deref()).map(texture)
+            }
+        }
+    }
+
+    /// Whether the choice improves a mastery skill (shown in a skill frame).
+    pub fn is_skill(&self) -> bool {
+        !matches!(self, Choice::Stat(_))
+    }
+
     pub fn apply(&self, stats: &mut HeroStats, hp: &mut Health, loadout: &mut Loadout) {
         match self {
             Choice::Stat(u) => u.apply(stats, hp),

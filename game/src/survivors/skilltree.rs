@@ -136,7 +136,7 @@ pub fn build(commands: &mut Commands, assets: &AssetServer, title: &TitleFont, p
     commands.spawn(backdrop(assets, MainMenuUi)).with_children(|root| {
         // Header: title, points, mastery tabs.
         root.spawn(Node { align_items: AlignItems::Center, column_gap: Val::Px(18.0), ..default() }).with_children(|h| {
-            h.spawn((Text::new("Masteries"), title.at(42.0)));
+            h.spawn((Text::new("Masteries"), title.at(34.0)));
             h.spawn((
                 Text::new(format!("Active Points: {}    Passive Points: {}", profile.active_points, profile.passive_points)),
                 text(22.0),
@@ -162,10 +162,10 @@ pub fn build(commands: &mut Commands, assets: &AssetServer, title: &TitleFont, p
 
         root.spawn(Node { flex_grow: 1.0, column_gap: Val::Px(14.0), min_height: Val::Px(0.0), ..default() }).with_children(|body| {
             // Left: artwork, name, level, equipped skills.
-            body.spawn(panel(assets, Node { width: Val::Px(290.0), flex_shrink: 0.0, flex_direction: FlexDirection::Column, row_gap: Val::Px(8.0), ..default() }))
+            body.spawn(panel(assets, Node { width: Val::Px(220.0), flex_shrink: 0.0, flex_direction: FlexDirection::Column, row_gap: Val::Px(8.0), ..default() }))
                 .with_children(|l| {
                     if let Some(art) = &m.icon {
-                        l.spawn((Node { width: Val::Px(250.0), height: Val::Px(250.0), ..default() }, ui::image(assets, texture(art), Color::WHITE)))
+                        l.spawn((Node { width: Val::Px(184.0), height: Val::Px(184.0), ..default() }, ui::image(assets, texture(art), Color::WHITE)))
                             .with_children(|a| {
                                 a.spawn((
                                     Node { position_type: PositionType::Absolute, width: Val::Percent(100.0), height: Val::Percent(100.0), ..default() },
@@ -173,22 +173,22 @@ pub fn build(commands: &mut Commands, assets: &AssetServer, title: &TitleFont, p
                                 ));
                             });
                     }
-                    l.spawn((Text::new(m.name.clone()), title.at(34.0), TextColor(m.color().lighter(0.35))));
-                    l.spawn((Text::new(m.slogan.clone()), text(17.0), TextColor(TEXT)));
+                    l.spawn((Text::new(m.name.clone()), title.at(26.0), TextColor(m.color().lighter(0.35))));
+                    l.spawn((Text::new(m.slogan.clone()), text(14.0), TextColor(TEXT)));
                     let next = TIER_LEVEL.iter().find(|t| **t > level);
                     let progress = match next {
                         Some(n) => format!("Mastery level {level}  (next tier at {n})"),
                         None => format!("Mastery level {level}  (all tiers open)"),
                     };
-                    l.spawn((Text::new(progress), text(18.0), TextColor(GOLD)));
-                    l.spawn((Text::new(format!("Skills used in runs ({}/{MAX_EQUIPPED})", profile.equipped.len())), title.at(20.0), Node { margin: UiRect::top(Val::Px(10.0)), ..default() }));
+                    l.spawn((Text::new(progress), text(14.0), TextColor(GOLD)));
+                    l.spawn((Text::new(format!("Skills used in runs ({}/{MAX_EQUIPPED})", profile.equipped.len())), title.at(16.0), Node { margin: UiRect::top(Val::Px(8.0)), ..default() }));
                     for id in &profile.equipped {
                         if let Some((_, _, s)) = book.active(id) {
                             l.spawn(Node { align_items: AlignItems::Center, column_gap: Val::Px(8.0), ..default() }).with_children(|r| {
                                 if let Some(icon) = &s.icon {
                                     r.spawn((Node { width: Val::Px(40.0), height: Val::Px(40.0), ..default() }, ui::image(assets, texture(icon), Color::WHITE)));
                                 }
-                                r.spawn((Text::new(format!("{}  {}", s.name, profile.active_level(id))), text(17.0)));
+                                r.spawn((Text::new(format!("{}  {}", s.name, profile.active_level(id))), text(14.0)));
                             });
                         }
                     }
@@ -208,10 +208,10 @@ pub fn build(commands: &mut Commands, assets: &AssetServer, title: &TitleFont, p
                     }
                     for (t, tier) in m.tiers.iter().enumerate() {
                         let open = skills::tier_open(profile, book, &m.id, t);
-                        c.spawn(Node { align_items: AlignItems::Center, column_gap: Val::Px(3.0), flex_grow: 1.0, ..default() }).with_children(|row| {
-                            row.spawn(Node { width: Val::Px(66.0), flex_shrink: 0.0, flex_direction: FlexDirection::Column, ..default() }).with_children(|lbl| {
-                                lbl.spawn((Text::new(format!("Tier {}", roman(t))), title.at(16.0), TextColor(if open { GOLD } else { Color::srgb(0.45, 0.43, 0.4) })));
-                                lbl.spawn((Text::new(format!("level {}", TIER_LEVEL[t])), text(12.0), TextColor(TEXT)));
+                        c.spawn(Node { align_items: AlignItems::Center, column_gap: Val::Px(2.0), flex_grow: 1.0, ..default() }).with_children(|row| {
+                            row.spawn(Node { width: Val::Px(52.0), flex_shrink: 0.0, flex_direction: FlexDirection::Column, ..default() }).with_children(|lbl| {
+                                lbl.spawn((Text::new(format!("Tier {}", roman(t))), title.at(14.0), TextColor(if open { GOLD } else { Color::srgb(0.45, 0.43, 0.4) })));
+                                lbl.spawn((Text::new(format!("lvl {}", TIER_LEVEL[t])), text(11.0), TextColor(TEXT)));
                             });
                             for (i, a) in tier.actives.iter().enumerate().filter(|(_, a)| !a.wip) {
                                 let n = NodeRef { mastery: tab, tier: t, passive: false, index: i };
@@ -220,7 +220,7 @@ pub fn build(commands: &mut Commands, assets: &AssetServer, title: &TitleFont, p
                                 let equipped = profile.equipped.contains(&a.id);
                                 node(row, assets, n, a.icon.as_deref(), &format!("{lvl}/{ACTIVE_MAX_LEVEL}"), open && playable, lvl > 0, equipped, view.selected == Some(n));
                             }
-                            row.spawn(Node { width: Val::Px(2.0), height: Val::Px(56.0), margin: UiRect::horizontal(Val::Px(5.0)), ..default() })
+                            row.spawn(Node { width: Val::Px(2.0), height: Val::Px(46.0), margin: UiRect::horizontal(Val::Px(4.0)), ..default() })
                                 .insert(BackgroundColor(GOLD.with_alpha(0.4)));
                             for (i, p) in tier.passives.iter().enumerate() {
                                 let n = NodeRef { mastery: tab, tier: t, passive: true, index: i };
@@ -233,7 +233,7 @@ pub fn build(commands: &mut Commands, assets: &AssetServer, title: &TitleFont, p
                 });
 
             // Right: details of the selected skill.
-            body.spawn(panel(assets, Node { width: Val::Px(400.0), flex_shrink: 0.0, flex_direction: FlexDirection::Column, row_gap: Val::Px(8.0), overflow: Overflow::clip(), ..default() }))
+            body.spawn(panel(assets, Node { width: Val::Px(330.0), flex_shrink: 0.0, flex_direction: FlexDirection::Column, row_gap: Val::Px(8.0), overflow: Overflow::clip(), ..default() }))
                 .with_children(|d| details(d, assets, title, profile, book, view));
         });
 
@@ -249,7 +249,7 @@ pub fn build(commands: &mut Commands, assets: &AssetServer, title: &TitleFont, p
 /// One skill/passive icon in its TQ2 gold frame, with its level below.
 #[allow(clippy::too_many_arguments)]
 fn node(row: &mut ChildSpawnerCommands, assets: &AssetServer, n: NodeRef, icon: Option<&str>, level: &str, available: bool, learned: bool, equipped: bool, selected: bool) {
-    let (frame, w, h) = if n.passive { ("t_frame_gold_passivespell", 50.0, 59.0) } else { ("t_frame_gold_activespell", 54.0, 63.0) };
+    let (frame, w, h) = if n.passive { ("t_frame_gold_passivespell", 42.0, 50.0) } else { ("t_frame_gold_activespell", 46.0, 54.0) };
     let tint = if learned {
         Color::WHITE
     } else if available {
@@ -265,7 +265,7 @@ fn node(row: &mut ChildSpawnerCommands, assets: &AssetServer, n: NodeRef, icon: 
             ))
             .with_children(|f| {
                 if let Some(icon) = icon {
-                    let (top, size) = if n.passive { (10.0, 30.0) } else { (6.0, 38.0) };
+                    let (top, size) = if n.passive { (8.0, 26.0) } else { (5.0, 32.0) };
                     f.spawn((
                         Node { position_type: PositionType::Absolute, top: Val::Px(top), width: Val::Px(size), height: Val::Px(size), ..default() },
                         ui::image(assets, texture(icon), tint),
@@ -273,7 +273,7 @@ fn node(row: &mut ChildSpawnerCommands, assets: &AssetServer, n: NodeRef, icon: 
                 }
             })
             .observe(click(TreeAction::Select(n)));
-            col.spawn((Text::new(level.to_string()), text(13.0), TextColor(if learned { GOLD } else { TEXT })));
+            col.spawn((Text::new(level.to_string()), text(11.0), TextColor(if learned { GOLD } else { TEXT })));
         });
 }
 
@@ -293,7 +293,7 @@ fn details(d: &mut ChildSpawnerCommands, assets: &AssetServer, title: &TitleFont
         let p = &tier.passives[n.index];
         let level = profile.passive_level(&p.id);
         header(d, assets, title, p.icon.as_deref(), &p.name, &format!("Passive · Tier {} · Level {level}/{}", roman(n.tier), p.max_level.max(1)));
-        rich(d, render(&p.description, &skills::passive_values(p, level)), 17.0, Val::Percent(100.0));
+        rich(d, render(&p.description, &skills::passive_values(p, level)), 14.0, Val::Percent(100.0));
         if skills::lines(p).is_empty() {
             d.spawn((Text::new("This passive's special effect is not in the game yet."), text(16.0), TextColor(Color::srgb(1.0, 0.6, 0.4))));
         }
@@ -302,7 +302,7 @@ fn details(d: &mut ChildSpawnerCommands, assets: &AssetServer, title: &TitleFont
             for f in &p.feats {
                 let mut spans = vec![(format!("{}: ", f.name), GOLD)];
                 spans.extend(render(&f.description, &|_| None));
-                rich(d, spans, 15.0, Val::Percent(100.0));
+                rich(d, spans, 13.0, Val::Percent(100.0));
             }
         }
         let blocked = skills::passive_blocked(profile, book, &p.id);
@@ -318,8 +318,8 @@ fn details(d: &mut ChildSpawnerCommands, assets: &AssetServer, title: &TitleFont
         match abilities::spec(&a.id) {
             Some(spec) => {
                 let slot = Slot::new(spec, a.name.clone(), level.max(1));
-                let values = slot.values(&HeroStats::default(), &profile.equipment());
-                rich(d, render(&a.description, &values), 17.0, Val::Percent(100.0));
+                let values = slot.values(&HeroStats::default(), &super::equipment::Equipment::default());
+                rich(d, render(&a.description, &values), 14.0, Val::Percent(100.0));
                 d.spawn((Text::new(format!("Cooldown {:.1} s", spec.cooldown)), text(16.0), TextColor(GOLD)));
                 let mods: Vec<String> = book.modifiers(a).filter(|m| !modifier_effects(&m.description).is_empty()).map(|m| m.name.clone()).collect();
                 if !mods.is_empty() {
@@ -328,7 +328,7 @@ fn details(d: &mut ChildSpawnerCommands, assets: &AssetServer, title: &TitleFont
                 }
             }
             None => {
-                rich(d, render(&a.description, &|_| None), 17.0, Val::Percent(100.0));
+                rich(d, render(&a.description, &|_| None), 14.0, Val::Percent(100.0));
                 d.spawn((Text::new("This skill is not in the game yet."), text(16.0), TextColor(Color::srgb(1.0, 0.6, 0.4))));
             }
         }
@@ -350,10 +350,10 @@ fn details(d: &mut ChildSpawnerCommands, assets: &AssetServer, title: &TitleFont
 fn header(d: &mut ChildSpawnerCommands, assets: &AssetServer, title: &TitleFont, icon: Option<&str>, name: &str, sub: &str) {
     d.spawn(Node { align_items: AlignItems::Center, column_gap: Val::Px(12.0), ..default() }).with_children(|h| {
         if let Some(icon) = icon {
-            h.spawn((Node { width: Val::Px(72.0), height: Val::Px(72.0), ..default() }, BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.6)), ui::image(assets, texture(icon), Color::WHITE)));
+            h.spawn((Node { width: Val::Px(56.0), height: Val::Px(56.0), ..default() }, BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.6)), ui::image(assets, texture(icon), Color::WHITE)));
         }
         h.spawn(Node { flex_direction: FlexDirection::Column, ..default() }).with_children(|t| {
-            t.spawn((Text::new(name.to_string()), title.at(28.0)));
+            t.spawn((Text::new(name.to_string()), title.at(22.0)));
             t.spawn((Text::new(sub.to_string()), text(16.0), TextColor(GOLD)));
         });
     });

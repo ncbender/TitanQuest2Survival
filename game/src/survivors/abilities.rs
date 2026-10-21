@@ -301,7 +301,7 @@ impl Slot {
     pub fn damage(&self, stats: &HeroStats, eq: &Equipment, buffs: &Buffs) -> f32 {
         let level = 1.0 + 0.25 * (self.level - 1) as f32;
         let mods = 1.0 + 0.3 * self.n(ModEffect::Damage) as f32;
-        let base = if self.spec.weapon { self.spec.damage * eq.main.damage * stats.damage } else { self.spec.damage * stats.skill_damage * eq.skill_damage() };
+        let base = if self.spec.weapon { self.spec.damage * eq.weapon_damage() * stats.damage } else { self.spec.damage * stats.skill_damage * eq.skill_damage() };
         base * level * mods * buffs.damage()
     }
 

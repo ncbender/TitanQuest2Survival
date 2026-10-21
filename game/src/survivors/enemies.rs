@@ -197,11 +197,11 @@ fn chase_and_attack(
     stats: Res<super::player::HeroStats>,
     buffs: Res<super::abilities::Buffs>,
     mut hero: Query<(&Pos, &mut Health, &Equipment), (With<Hero>, Without<Enemy>)>,
-    mut enemies: Query<(Entity, &mut Pos, &mut Vel, &Radius, &mut Enemy, &mut CharacterAnim, &super::abilities::Ailments), Without<Hero>>,
+    mut enemies: Query<(Entity, &mut Pos, &mut Vel, &Radius, &mut Enemy, &mut CharacterAnim, &super::abilities::Ailments, &mut Health), Without<Hero>>,
 ) {
     let Ok((hero_pos, mut hero_hp, gear)) = hero.single_mut() else { return };
     let dt = time.delta_secs();
-    for (e, mut pos, mut vel, radius, mut enemy, mut anim, ail) in &mut enemies {
+    for (e, mut pos, mut vel, radius, mut enemy, mut anim, ail, mut enemy_hp) in &mut enemies {
         let def = enemy.def;
         if enemy.spawning > 0.0 {
             enemy.spawning -= dt;
@@ -231,6 +231,8 @@ fn chase_and_attack(
             if enemy.attack_timer <= 0.0 && !ail.stunned() {
                 enemy.attack_timer = config::ATTACK_COOLDOWN;
                 hero_hp.hp -= enemy.damage * (1.0 - (gear.damage_reduction() + stats.armor + buffs.armor()).min(0.8));
+                // Retaliation affixes hurt the attacker.
+                enemy_hp.hp -= stats.retaliation;
                 *anim = CharacterAnim::once(def.attack);
             }
         } else {
