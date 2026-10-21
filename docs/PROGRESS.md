@@ -24,10 +24,20 @@
 | 250 | 60 | 16.73 | 20.94 |
 | 500 | 45 | 22.27 | 30.59 |
 
+After merging part skeletons into the body at runtime (`character.rs`, same day):
+
+| enemies | avg FPS | avg ms | p95 ms |
+|---|---|---|---|
+| 250 | 115 | 8.69 | 10.15 |
+| 500 | 84 | 11.95 | 14.70 |
+| 800 | 50 | 19.94 | 25.39 |
+
+Profiling note: with only the body part (`TQ2_BODY_ONLY=1`) 500 Boarmen hit the 120 FPS cap, so
+the extra skeletons of mane/arm-hair parts were the main cost.
+
 ## Next
 
-1. Performance: animation LOD / update-rate reduction, drop mane/armhair parts at distance,
-   profile where the 250+ cost goes (pose evaluation vs. skinning vs. draw calls).
+1. Performance beyond 500: animation LOD / reduced update rate for distant enemies.
 2. ~~More enemy types~~ Spider, Giant Boar, Skeleton (rises from the ground), Harpy, Cyclops boss
    added via `tools/assets.json` + `bestiary.rs`; still no real death animation.
 3. Weapon on the hero (staff), cast animation, TQ2 VFX instead of the temporary Nova torus.

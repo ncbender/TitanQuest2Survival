@@ -1,16 +1,21 @@
 //! Modular TQ2 characters: a body plus parts (hair, armour, mane…) exported as separate
 //! skinned glTFs that all carry the same baked clips (`Tq2Extract animate`). Each part has
 //! its own AnimationPlayer; `CharacterAnim` on the root drives all of them in lockstep.
+//!
+//! Once spawned, every part is re-skinned onto the body's joints and its duplicate joints are
+//! removed, so a character animates one skeleton (plus the few bones only a part has, e.g. a
+//! mane). Without this, extra parts tripled the animation cost per enemy.
 use bevy::gltf::Gltf;
+use bevy::mesh::skinning::SkinnedMesh;
 use bevy::prelude::*;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 pub struct CharacterPlugin;
 
 impl Plugin for CharacterPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<PartLibrary>()
-            .add_systems(Update, (instantiate_parts, bind_players, drive_animation).chain());
+            .add_systems(Update, (instantiate_parts, merge_parts, bind_players, drive_animation).chain());
     }
 }
 
@@ -31,16 +36,21 @@ impl CharacterAnim {
     }
 }
 
-/// A part glb waiting for its asset before the scene is spawned.
+/// A part glb waiting for its asset before the scene is spawned; index 0 is the body.
 #[derive(Component)]
-struct PendingPart(String);
+struct PendingPart(String, usize);
 
 /// Spawned part scene root; `root` is the character entity carrying `CharacterAnim`.
 #[derive(Component)]
 struct CharacterPart {
     root: Entity,
     path: String,
+    index: usize,
 }
+
+/// The part's skins already point at the body's joints.
+#[derive(Component)]
+struct Merged;
 
 /// Links an AnimationPlayer back to its character and part.
 #[derive(Component)]
@@ -60,8 +70,10 @@ struct PartLibrary(HashMap<String, PartAssets>);
 
 /// Spawns the parts of a character as children of `root` (which must have a Transform).
 pub fn attach_parts(commands: &mut Commands, root: Entity, parts: &[&str]) {
-    for path in parts {
-        let child = commands.spawn((PendingPart(path.to_string()), Transform::default(), Visibility::default())).id();
+    // Profiling switch: TQ2_BODY_ONLY=1 spawns only the first part of every character.
+    let count = if std::env::var_os("TQ2_BODY_ONLY").is_some() { 1 } else { parts.len() };
+    for (index, path) in parts[..count].iter().enumerate() {
+        let child = commands.spawn((PendingPart(path.to_string(), index), Transform::default(), Visibility::default())).id();
         commands.entity(root).add_child(child);
     }
 }
@@ -92,7 +104,59 @@ fn instantiate_parts(
         commands
             .entity(entity)
             .remove::<PendingPart>()
-            .insert((WorldAssetRoot(gltf.scenes[0].clone()), CharacterPart { root: parent.parent(), path: part.0.clone() }));
+            .insert((WorldAssetRoot(gltf.scenes[0].clone()), CharacterPart { root: parent.parent(), path: part.0.clone(), index: part.1 }));
+    }
+}
+
+/// Re-skins each non-body part onto the body's joints (matched by bone name), moves the
+/// bones only the part has under their matching body bone, and despawns the duplicates.
+fn merge_parts(
+    mut commands: Commands,
+    pending: Query<(Entity, &CharacterPart), Without<Merged>>,
+    all_parts: Query<(Entity, &CharacterPart)>,
+    children: Query<&Children>,
+    parents: Query<&ChildOf>,
+    names: Query<&Name>,
+    mut skins: Query<&mut SkinnedMesh>,
+) {
+    for (part_entity, part) in &pending {
+        if part.index == 0 {
+            commands.entity(part_entity).insert(Merged);
+            continue;
+        }
+        let Some((body, _)) = all_parts.iter().find(|(_, p)| p.root == part.root && p.index == 0) else { continue };
+        // Wait until both scenes have spawned their skinned meshes.
+        let part_skins: Vec<Entity> = children.iter_descendants(part_entity).filter(|e| skins.contains(*e)).collect();
+        if part_skins.is_empty() || !children.iter_descendants(body).any(|e| skins.contains(e)) {
+            continue;
+        }
+        let body_bones: HashMap<&str, Entity> =
+            children.iter_descendants(body).filter_map(|e| names.get(e).ok().map(|n| (n.as_str(), e))).collect();
+        let part_joints: HashSet<Entity> = part_skins.iter().flat_map(|s| skins.get(*s).unwrap().joints.clone()).collect();
+        let remap: HashMap<Entity, Entity> = part_joints
+            .iter()
+            .filter_map(|j| names.get(*j).ok().and_then(|n| body_bones.get(n.as_str())).map(|b| (*j, *b)))
+            .collect();
+
+        // Part-only bones keep their own animation but now follow the body's parent bone.
+        for joint in part_joints.iter().filter(|j| !remap.contains_key(j)) {
+            if let Some(&body_parent) = parents.get(*joint).ok().and_then(|p| remap.get(&p.parent())) {
+                commands.entity(*joint).insert(ChildOf(body_parent));
+            }
+        }
+        for skin in &part_skins {
+            for joint in skins.get_mut(*skin).unwrap().joints.iter_mut() {
+                if let Some(&b) = remap.get(joint) {
+                    *joint = b;
+                }
+            }
+        }
+        // Duplicates are no longer referenced; despawning them removes their animation work.
+        // (Queued after the re-parenting above, so part-only bones survive.)
+        for duplicate in remap.keys() {
+            commands.entity(*duplicate).try_despawn();
+        }
+        commands.entity(part_entity).insert(Merged);
     }
 }
 
