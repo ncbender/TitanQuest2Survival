@@ -87,13 +87,13 @@ fn auto_attack(
     stats: Res<HeroStats>,
     mut weapons: ResMut<Weapons>,
     grid: Res<EnemyGrid>,
-    hero: Query<(Entity, &Pos, &super::Vel, &Equipment), With<Hero>>,
+    hero: Query<(Entity, &Pos, &super::Vel, &Equipment, Option<&super::abilities::CastLock>), With<Hero>>,
     mut enemies: Query<(&mut Health, &Ailments), With<Enemy>>,
     mut hits: MessageWriter<Hit>,
     flipbook: Res<Flipbook>,
     buffs: Res<Buffs>,
 ) {
-    let Ok((hero_entity, hero, hero_vel, eq)) = hero.single() else { return };
+    let Ok((hero_entity, hero, hero_vel, eq, cast_lock)) = hero.single() else { return };
     let w = eq.main;
     let base = eq.weapon_damage() * stats.damage * buffs.damage();
     weapons.attack_timer -= time.delta_secs();
@@ -114,10 +114,15 @@ fn auto_attack(
     let aim = (target - hero.0).normalize_or(Vec2::X);
     // Standing heroes swing with the whole body; running ones with the upper body only.
     let full_body = hero_vel.0.length_squared() < 0.1;
-    commands.entity(hero_entity).insert((
-        UpperBodyAction { clip, max_duration: weapons.attack_timer.max(0.35), full_body },
-        super::Facing { dir: aim, time: 0.45 },
-    ));
+    // A skill animation that is still playing is not cut off by a weapon swing.
+    if cast_lock.is_some_and(|l| l.0 > time.elapsed_secs()) {
+        commands.entity(hero_entity).insert(super::Facing { dir: aim, time: 0.45 });
+    } else {
+        commands.entity(hero_entity).insert((
+            UpperBodyAction { clip, max_duration: weapons.attack_timer.max(0.35), full_body },
+            super::Facing { dir: aim, time: 0.45 },
+        ));
+    }
     let at = Vec3::new(hero.0.x, ground.stand(hero.0) + 1.2, hero.0.y);
     audio.play(w.fire_sound, Some(at), 0.5, 0.1);
 
@@ -244,6 +249,12 @@ fn kill_dead(
         audio.play(sound::KILL, Some(Vec3::new(pos.0.x, ground.stand(pos.0) + 1.0, pos.0.y)), 0.6, 0.08);
         // Leave the simulation now; the body sinks away in `fade_dying`.
         commands.entity(e).remove::<(Enemy, Health, Pos)>().insert(Dying(0.0));
+        // Bosses drop Ichor for mastery tiers (the second boss of a run two).
+        if enemy.boss {
+            run.bosses += 1;
+            run.ichor += if run.bosses >= 2 { 2 } else { 1 };
+            info!("boss killed: {} Ichor this run", run.ichor);
+        }
         // Elites and bosses leave a chest with gear to choose from.
         if enemy.elite || enemy.boss {
             info!("chest dropped at {:.0} s", run.time);

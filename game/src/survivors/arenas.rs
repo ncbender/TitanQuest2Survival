@@ -1,4 +1,4 @@
-//! Arenas: a TQ2 menu scene or arenas generated from TQ2 pieces (mapgen.rs), each
+//! Arenas generated from TQ2 pieces (mapgen.rs), each
 //! with its own enemy waves and boss. Surviving an arena unlocks the next; later arenas are
 //! tougher and drop better loot.
 use bevy::prelude::*;
@@ -27,7 +27,7 @@ pub const ARENAS: &[ArenaDef] = &[
     ArenaDef {
         id: "coast",
         name: "Aegean Coast",
-        scene: "menu2",
+        scene: "gen:coast",
         blurb: "A quiet beach, until the boarmen come down from the hills.",
         roster: &[s(&b::SPIDER, 0.0, 3), s(&b::BOARMAN, 0.0, 3), s(&b::CRAB, 60.0, 2), s(&b::GIANT_BOAR, 120.0, 1), s(&b::SKELETON, 180.0, 2), s(&b::HARPY, 240.0, 2)],
         boss: &b::CYCLOPS,

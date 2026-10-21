@@ -46,6 +46,7 @@ const SPELL_SLOT: f32 = 58.0;
 
 pub fn plugin(app: &mut App) {
     app.init_resource::<ClickedChoice>()
+        .init_resource::<EndChoice>()
         .add_systems(Startup, spawn_hud)
         .add_systems(Update, (update_hud, update_spell_bar, hud_visibility, spawn_damage_numbers, float_damage_numbers))
         // The panel shows the offer, so it must run after the offer is rolled.
@@ -139,6 +140,9 @@ Boss: {} {:.0} %", e.def.name, hp.hp / hp.max * 100.0))
         let mut found = if loot.0.is_empty() { String::new() } else { format!("   Loot: {}", loot.0.len()) };
         if mech.barrier_max > 0.0 {
             found += &format!("   Barrier: {:.0}", mech.barrier);
+        }
+        if run.ichor > 0 {
+            found += &format!("   Ichor: {}", run.ichor);
         }
         if mech.rage > 0 {
             found += &format!("   Rage: {}", mech.rage);
@@ -401,25 +405,85 @@ fn choose_loot(
     next.set(GameState::Playing);
 }
 
-fn show_end(mut commands: Commands, assets: Res<AssetServer>, run: Res<Run>, reward: Res<LastReward>, title_font: Res<TitleFont>) {
-    let title = if run.won { "Victory" } else { "You have fallen" };
+/// Which end-screen button was clicked (keys R / M do the same).
+#[derive(Resource, Default)]
+pub struct EndChoice(pub Option<bool>);
+
+fn show_end(
+    mut commands: Commands,
+    assets: Res<AssetServer>,
+    run: Res<Run>,
+    reward: Res<LastReward>,
+    title_font: Res<TitleFont>,
+    arena: Res<super::arenas::CurrentArena>,
+) {
+    let (title, tint) = if run.won { ("Victory", GOLD) } else { ("You Have Fallen", Color::srgb(0.9, 0.42, 0.34)) };
     commands.spawn(panel(EndPanel)).with_children(|p| {
-        window(p, &assets, &title_font, title.into(), 660.0, |w| {
-            if run.won {
-                w.spawn((Text::new("The Titans are impressed."), text(19.0), TextColor(TEXT)));
-            }
-            w.spawn((
-                Text::new(format!("Level {}   ·   Kills {}   ·   Time {:02}:{:02}", run.level, run.kills, run.time as u32 / 60, run.time as u32 % 60)),
-                text(22.0),
-            ));
-            w.spawn((Text::new(format!("Active points +{}   ·   Passive points +{}   ·   Gold +{}", reward.active, reward.passive, reward.gold)), text(21.0), TextColor(GOLD)));
-            if !reward.items.is_empty() {
-                w.spawn((Text::new("Items to the stash"), title_font.at(20.0)));
-                for (name, rarity) in &reward.items {
-                    w.spawn((Text::new(name.clone()), text(19.0), TextColor(rarity.color())));
+        p.spawn((
+            Node { width: Val::Px(820.0), flex_direction: FlexDirection::Column, align_items: AlignItems::Center, row_gap: Val::Px(14.0), padding: UiRect::new(Val::Px(40.0), Val::Px(40.0), Val::Px(26.0), Val::Px(30.0)), ..default() },
+        ))
+        .with_children(|w| {
+            w.spawn(ui::fill(ui::PANEL_FILL, 12.0));
+            w.spawn(ui::frame(&assets, "t_frame_gold_big03", 48.0, Color::WHITE));
+            w.spawn((Text::new(title), title_font.at(46.0), TextColor(tint)));
+            w.spawn((Node { width: Val::Px(420.0), height: Val::Px(12.0), ..default() }, ui::stretched(&assets, "t_frame_gold_headline_thin_top", Color::WHITE)));
+            let subtitle = if run.won { format!("{} survived – the Titans are impressed.", arena.0.name) } else { format!("{} claimed another hero.", arena.0.name) };
+            w.spawn((Text::new(subtitle), text(18.0), TextColor(TEXT)));
+            // Run numbers as tiles.
+            w.spawn(Node { column_gap: Val::Px(12.0), margin: UiRect::top(Val::Px(6.0)), ..default() }).with_children(|row| {
+                for (label, value) in [
+                    ("Level", run.level.to_string()),
+                    ("Kills", run.kills.to_string()),
+                    ("Time", format!("{:02}:{:02}", run.time as u32 / 60, run.time as u32 % 60)),
+                    ("Bosses", run.bosses.to_string()),
+                ] {
+                    row.spawn((Node { width: Val::Px(160.0), padding: UiRect::axes(Val::Px(10.0), Val::Px(10.0)), flex_direction: FlexDirection::Column, align_items: AlignItems::Center, ..default() }, BackgroundColor(ui::ROW_FILL)))
+                        .with_children(|t| {
+                            t.spawn(ui::frame(&assets, "t_frame_gold_small05", 8.0, Color::WHITE));
+                            t.spawn((Text::new(value), title_font.at(30.0), TextColor(Color::WHITE)));
+                            t.spawn((Text::new(label), text(15.0), TextColor(TEXT)));
+                        });
                 }
+            });
+            // Rewards with their icons.
+            ui::headline(w, &assets, &title_font, "Rewards", 22.0);
+            w.spawn(Node { column_gap: Val::Px(26.0), align_items: AlignItems::Center, ..default() }).with_children(|row| {
+                let mut reward_item = |icon: Option<&str>, value: String, label: &str| {
+                    row.spawn(Node { align_items: AlignItems::Center, column_gap: Val::Px(8.0), ..default() }).with_children(|r| {
+                        if let Some(icon) = icon {
+                            r.spawn((Node { width: Val::Px(34.0), height: Val::Px(34.0), ..default() }, ui::stretched(&assets, icon, Color::WHITE)));
+                        }
+                        r.spawn(Node { flex_direction: FlexDirection::Column, ..default() }).with_children(|t| {
+                            t.spawn((Text::new(value), title_font.at(24.0), TextColor(GOLD)));
+                            t.spawn((Text::new(label), text(13.0), TextColor(TEXT)));
+                        });
+                    });
+                };
+                reward_item(Some("t_icon_embossed_xp"), format!("+{}", reward.active), "Active points");
+                reward_item(Some("t_icon_embossed_xp"), format!("+{}", reward.passive), "Passive points");
+                reward_item(Some("t_icon_embossed_coin02"), format!("+{}", reward.gold), "Gold");
+                if reward.ichor > 0 {
+                    reward_item(Some("t_icon_crystal_active"), format!("+{}", reward.ichor), "Ichor");
+                }
+            });
+            if !reward.items.is_empty() {
+                ui::headline(w, &assets, &title_font, "Treasure", 22.0);
+                w.spawn(Node { flex_wrap: FlexWrap::Wrap, justify_content: JustifyContent::Center, column_gap: Val::Px(10.0), row_gap: Val::Px(8.0), max_width: Val::Px(740.0), ..default() }).with_children(|list| {
+                    for (name, rarity, icon) in &reward.items {
+                        list.spawn((Node { align_items: AlignItems::Center, column_gap: Val::Px(8.0), padding: UiRect::axes(Val::Px(8.0), Val::Px(4.0)), ..default() }, BackgroundColor(rarity.color().with_alpha(0.12))))
+                            .with_children(|it| {
+                                if !icon.is_empty() {
+                                    it.spawn((Node { width: Val::Px(30.0), height: Val::Px(30.0), ..default() }, ImageNode { image_mode: NodeImageMode::Auto, ..ImageNode::new(assets.load(icon.clone())) }));
+                                }
+                                it.spawn((Text::new(name.clone()), text(16.0), TextColor(rarity.color())));
+                            });
+                    }
+                });
             }
-            w.spawn((Text::new("R – restart     M – main menu"), text(18.0), TextColor(TEXT), Node { margin: UiRect::top(Val::Px(8.0)), ..default() }));
+            w.spawn(Node { column_gap: Val::Px(16.0), margin: UiRect::top(Val::Px(10.0)), ..default() }).with_children(|b| {
+                b.spawn(ui::button(&assets, "Fight again  (R)", 260.0, true, true)).observe(|_: On<PointerClick>, mut c: ResMut<EndChoice>| c.0 = Some(true));
+                b.spawn(ui::button(&assets, "Main menu  (M)", 260.0, true, false)).observe(|_: On<PointerClick>, mut c: ResMut<EndChoice>| c.0 = Some(false));
+            });
         });
     });
 }

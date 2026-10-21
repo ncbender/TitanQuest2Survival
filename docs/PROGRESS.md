@@ -175,6 +175,20 @@ the extra skeletons of mane/arm-hair parts were the main cost.
   as the run start; in the inventory (when no item is selected) and on the pause screen (Esc or
   C) with the run's level-up bonuses. Wheel scrolling for the bag and the sheet (`ScrollArea`).
 
+## Ichor, skill animations, coast arena, end screen (2026-10-21)
+
+- Ichor (new currency, shared by all heroes): bosses drop it (1, the second boss of a run 2,
+  +1 for surviving). Mastery tiers II–V need their mastery level and an Ichor unlock per hero
+  and mastery (1/2/3/4 Ichor; "Change masteries" returns it). Verified: tier labels show the
+  cost and unlock, locked skills explain why; unit test for order and refund.
+- Skill animations: 49 TQ2 skill clips baked into the hero (7 per stance: projectile, area,
+  ground/throw, buff, summon, dash, melee); each cast plays the stance's clip for its kind of
+  skill, and weapon swings do not cut it off for 0.7 s.
+- Aegean Coast is generated now too (coast kit: sand/pebble ground, driftwood, corals,
+  shells, boulders, wrecks and boats on the rim); the menu backdrop is still TQ2's beach scene.
+- End screen: stat tiles (level, kills, time, bosses), rewards with TQ2 icons (points, gold,
+  Ichor), treasure with item icons in rarity colours, clickable "Fight again" / "Main menu".
+
 ## Blockers / risks
 
 - Usmap RVA is build-specific: a TQ2 patch requires re-running the dumper with the game open.

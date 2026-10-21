@@ -29,10 +29,49 @@ pub struct Stance {
     pub run: &'static str,
     /// Attack clips, played in turn on the upper body.
     pub attacks: &'static [&'static str],
+    /// TQ2's skill clips of this stance, by kind of skill.
+    pub casts: Casts,
+}
+
+/// Cast clips for the kinds of skills (see `abilities::Shape::cast_kind`).
+pub struct Casts {
+    pub projectile: &'static str,
+    pub area: &'static str,
+    pub ground: &'static str,
+    pub buff: &'static str,
+    pub summon: &'static str,
+    pub dash: &'static str,
+    pub melee: &'static str,
+}
+
+/// The kind of motion a skill needs.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum CastKind {
+    Projectile,
+    Area,
+    Ground,
+    Buff,
+    Summon,
+    Dash,
+    Melee,
+}
+
+impl Casts {
+    pub fn clip(&self, kind: CastKind) -> &'static str {
+        match kind {
+            CastKind::Projectile => self.projectile,
+            CastKind::Area => self.area,
+            CastKind::Ground => self.ground,
+            CastKind::Buff => self.buff,
+            CastKind::Summon => self.summon,
+            CastKind::Dash => self.dash,
+            CastKind::Melee => self.melee,
+        }
+    }
 }
 
 macro_rules! stance {
-    ($set:literal) => {
+    ($set:literal, $proj:literal, $area:literal, $ground:literal, $buff:literal, $summon:literal, $dash:literal, $melee:literal) => {
         Stance {
             idle: concat!("a_male_", $set, "_idle_combat_01"),
             run: concat!("a_male_", $set, "_run_01"),
@@ -41,17 +80,34 @@ macro_rules! stance {
                 concat!("a_male_", $set, "_attack_02_01"),
                 concat!("a_male_", $set, "_attack_03_01"),
             ],
+            casts: Casts {
+                projectile: concat!("a_male_", $set, "_", $proj),
+                area: concat!("a_male_", $set, "_", $area),
+                ground: concat!("a_male_", $set, "_", $ground),
+                buff: concat!("a_male_", $set, "_", $buff),
+                summon: concat!("a_male_", $set, "_", $summon),
+                dash: concat!("a_male_", $set, "_", $dash),
+                melee: concat!("a_male_", $set, "_", $melee),
+            },
         }
     };
 }
 
-const STAFF_STANCE: Stance = stance!("staff2h");
-const BOW_STANCE: Stance = stance!("bow");
-const AXE_STANCE: Stance = stance!("axe2h");
-const SWORD_STANCE: Stance = stance!("sword");
-const SWORD_SHIELD_STANCE: Stance = stance!("sword+shield");
-const DUAL_SWORD_STANCE: Stance = stance!("sword+sword");
-const SWORD_TALISMAN_STANCE: Stance = stance!("sword+talisman");
+// Clips per stance (tools/assets.json bakes them into the hero).
+const STAFF_STANCE: Stance =
+    stance!("staff2h", "barrage_01", "chthonic_pulse_01", "grenade_throw_01", "forcefield_01", "summon_sentry_01", "blink_01", "armor_eruption_01");
+const BOW_STANCE: Stance =
+    stance!("bow", "barrage_01", "chthonic_pulse_01", "grenade_throw_01", "cast_doom_horn_01", "summon_sentry_01", "blink_01", "reap_01");
+const AXE_STANCE: Stance =
+    stance!("axe2h", "trickshot_01", "cast_stomp_01", "grenade_throw_01", "forcefield_01", "summon_sentry_01", "blink_01", "whirlwind_01");
+const SWORD_STANCE: Stance =
+    stance!("sword", "cast_lightning_bolt_01", "cast_ice_nova_01", "grenade_throw_01", "cast_cyclone_01", "summon_sentry_01", "blink_01", "whirlwind_01");
+const SWORD_SHIELD_STANCE: Stance =
+    stance!("sword+shield", "barrage_01", "chthonic_pulse_01", "grenade_throw_01", "forcefield_01", "summon_sentry_01", "blink_01", "whirlwind_01");
+const DUAL_SWORD_STANCE: Stance =
+    stance!("sword+sword", "barrage_01", "cast_stomp_01", "grenade_throw_01", "forcefield_01", "summon_sentry_01", "blink_01", "whirlwind_01");
+const SWORD_TALISMAN_STANCE: Stance =
+    stance!("sword+talisman", "barrage_01", "chthonic_pulse_01", "grenade_throw_01", "forcefield_01", "summon_sentry_01", "blink_01", "bladespin_01");
 
 pub struct WeaponDef {
     pub id: &'static str,

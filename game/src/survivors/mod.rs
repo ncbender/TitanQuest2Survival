@@ -124,6 +124,9 @@ pub struct Run {
     pub won: bool,
     /// Loot and favour of this run were credited to the profile.
     pub banked: bool,
+    /// Ichor from bosses killed in this run, and how many bosses fell.
+    pub ichor: u32,
+    pub bosses: u32,
 }
 
 /// Where the arena is and where the hero starts.
@@ -364,10 +367,17 @@ fn restart(
     keys: Res<ButtonInput<KeyCode>>,
     state: Res<State<GameState>>,
     arena: Res<arenas::CurrentArena>,
+    mut choice: ResMut<hud::EndChoice>,
     mut map: ResMut<crate::map::SelectedMap>,
+    mut next: ResMut<NextState<GameState>>,
     mut start: MessageWriter<StartRun>,
 ) {
-    if *state.get() == GameState::GameOver && keys.just_pressed(KeyCode::KeyR) {
+    let clicked = choice.0.take();
+    if *state.get() == GameState::GameOver && clicked == Some(false) {
+        next.set(GameState::MainMenu);
+        return;
+    }
+    if *state.get() == GameState::GameOver && (keys.just_pressed(KeyCode::KeyR) || clicked == Some(true)) {
         // A generated arena is rebuilt with a new seed.
         if arena.0.scene.starts_with("gen:") {
             map.0 = arenas::map_for_run(arena.0);

@@ -41,6 +41,8 @@ pub struct Character {
     pub armor: Option<u64>,
     pub runs: u32,
     pub best_time: f32,
+    /// Tiers unlocked with Ichor per mastery (2 = tiers II and III open).
+    pub tiers: BTreeMap<String, u32>,
 }
 
 static NO_CHARACTER: Character = Character {
@@ -57,6 +59,7 @@ static NO_CHARACTER: Character = Character {
     armor: None,
     runs: 0,
     best_time: 0.0,
+    tiers: BTreeMap::new(),
 };
 
 impl Character {
@@ -87,6 +90,8 @@ pub struct Profile {
     pub cleared: Vec<String>,
     /// Gold (from runs and recycling), shared by all heroes like the stash.
     pub gold: u32,
+    /// Ichor (from bosses) unlocks mastery tiers; shared by all heroes.
+    pub ichor: u32,
     /// Upgrades of the bag (each adds `BAG_STEP` slots).
     pub bag_level: u32,
 }
@@ -123,7 +128,9 @@ pub struct LastReward {
     pub active: u32,
     pub passive: u32,
     pub gold: u32,
-    pub items: Vec<(String, super::items::Rarity)>,
+    pub ichor: u32,
+    /// Name, rarity and icon of each item taken from the run.
+    pub items: Vec<(String, super::items::Rarity, String)>,
 }
 
 /// Greek names for new heroes.
@@ -450,14 +457,16 @@ pub fn bank_run(
         // A full bag recycles the item into gold.
         if profile.bag().len() >= profile.bag_capacity() {
             salvaged += item.salvage_value();
-            items.push((format!("{} (bag full: recycled)", item.name(&book)), item.rarity));
+            items.push((format!("{} (bag full: recycled)", item.name(&book)), item.rarity, item.item().map(|i| i.icon()).unwrap_or_default()));
             continue;
         }
-        items.push((item.name(&book), item.rarity));
+        items.push((item.name(&book), item.rarity, item.item().map(|i| i.icon()).unwrap_or_default()));
         profile.stash.push(item);
     }
     let gold = gold_for(&run, arena.0.tier) + salvaged;
     profile.gold += gold;
+    let ichor = run.ichor + if run.won { 1 } else { 0 };
+    profile.ichor += ichor;
     profile.active_points += active;
     profile.passive_points += passive;
     profile.runs += 1;
@@ -466,7 +475,7 @@ pub fn bank_run(
         profile.cleared.push(arena.0.id.to_string());
     }
     info!("run banked: +{active} active / +{passive} passive points, +{gold} gold, items {items:?}");
-    *reward = LastReward { active, passive, gold, items };
+    *reward = LastReward { active, passive, gold, ichor, items };
 }
 
 #[cfg(test)]
@@ -498,6 +507,27 @@ mod tests {
         let cap = p.bag_capacity();
         p.upgrade_bag().unwrap();
         assert_eq!(p.bag_capacity(), cap + BAG_STEP);
+    }
+
+    #[test]
+    fn ichor_unlocks_tiers_in_order() {
+        use crate::survivors::mastery_data::MasteryBook;
+        use crate::survivors::skills;
+        let book = MasteryBook::default();
+        let mut p = Profile::default();
+        p.new_hero(&SWORD);
+        // Tier I is always open; tier II needs Ichor (and mastery level 5, which an empty
+        // book cannot reach, so only the Ichor rules are checked here).
+        assert!(skills::tier_unlocked(&p, "storm", 0));
+        assert!(!skills::tier_unlocked(&p, "storm", 1));
+        assert!(skills::unlock_tier(&mut p, &book, "storm", 2).is_err(), "tier II first");
+        p.tiers.insert("storm".into(), 1);
+        assert!(skills::tier_unlocked(&p, "storm", 1) && !skills::tier_unlocked(&p, "storm", 2));
+        p.ichor = 5;
+        p.masteries.push("storm".into());
+        skills::refund(&mut p, true);
+        assert_eq!(p.ichor, 6, "changing masteries returns the Ichor");
+        assert!(p.tiers.is_empty());
     }
 
     #[test]

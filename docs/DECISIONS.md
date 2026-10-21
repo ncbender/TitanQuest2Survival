@@ -76,3 +76,8 @@ maps from TQ2's assets and chose a generator with themes over a hand editor: kit
 meshes and ground textures, placed by a seeded generator for open fields with cover and a
 natural border (`mapgen.rs`). The exported regions stay as the kits' sources.
 
+## D12 – Ichor from bosses opens mastery tiers (2026-10-21, user's request)
+Tiers above the first need a boss currency in addition to the mastery level, so progress
+through a mastery is tied to beating bosses. Ichor is shared like gold; unlocks are per hero
+and mastery and are refunded when the masteries are changed.
+

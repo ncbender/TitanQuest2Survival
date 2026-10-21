@@ -684,18 +684,42 @@ struct Mine {
 #[derive(Component)]
 struct Hover(f32);
 
+/// While a skill animation plays, weapon attacks do not replace it (the attack still hits).
+#[derive(Component)]
+pub struct CastLock(pub f32);
+
+impl Shape {
+    /// Which of the stance's cast clips fits this skill.
+    pub fn cast_kind(&self) -> super::equipment::CastKind {
+        use super::equipment::CastKind as K;
+        match self {
+            Shape::Volley { .. } | Shape::Line { .. } | Shape::Chain { .. } => K::Projectile,
+            Shape::Radial { .. } | Shape::Nova { .. } => K::Area,
+            Shape::Strike { .. } | Shape::Zone { .. } | Shape::Rain { .. } | Shape::Mines { .. } => K::Ground,
+            Shape::Boost { .. } | Shape::Curse { .. } => K::Buff,
+            Shape::Summon { .. } | Shape::Orbit { .. } => K::Summon,
+            Shape::Dash { .. } => K::Dash,
+            Shape::Melee { .. } => K::Melee,
+        }
+    }
+}
+
+/// Seconds a skill animation keeps weapon swings from interrupting it.
+const CAST_LOCK: f32 = 0.7;
+
 fn cast_skills(
     mut ctx: Ctx,
     time: Res<Time>,
     mut loadout: ResMut<Loadout>,
     mut buffs: ResMut<Buffs>,
-    mut hero: Query<(&mut Pos, &Equipment), With<Hero>>,
+    mut hero: Query<(Entity, &mut Pos, &Equipment, &super::Vel), With<Hero>>,
     mut enemies: Query<(&mut Health, &mut Ailments), With<Enemy>>,
     obstacles: Res<crate::obstacles::Obstacles>,
 ) {
-    let Ok((mut hero_pos, eq)) = hero.single_mut() else { return };
+    let Ok((hero_entity, mut hero_pos, eq, hero_vel)) = hero.single_mut() else { return };
     let dt = time.delta_secs();
     let stats = ctx.stats.clone();
+    let mut animation: Option<&'static str> = None;
     for slot in loadout.0.iter_mut() {
         slot.timer -= dt;
         if slot.timer > 0.0 {
@@ -946,7 +970,16 @@ fn cast_skills(
         slot.timer = if cast.is_some() { slot.cooldown(&stats) } else { 0.4 };
         if cast.is_some() {
             slot.cooldown_len = slot.timer;
+            animation.get_or_insert(eq.stance().casts.clip(slot.spec.shape.cast_kind()));
         }
+    }
+    // The first skill cast this tick plays TQ2's matching skill animation.
+    if let Some(clip) = animation {
+        let standing = hero_vel.0.length_squared() < 0.1;
+        ctx.commands.entity(hero_entity).insert((
+            crate::character::UpperBodyAction { clip, max_duration: 0.75, full_body: standing },
+            CastLock(time.elapsed_secs() + CAST_LOCK),
+        ));
     }
 }
 

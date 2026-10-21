@@ -1,6 +1,7 @@
 //! TQ2's mastery rules between runs: choose two of six masteries (the second once the first
 //! reaches `SECOND_MASTERY_LEVEL`), spend active points on skills and passive points on
-//! passives; points spent in a mastery are its level and open its tiers.
+//! passives; points spent in a mastery are its level. A tier opens at its mastery level once
+//! it was unlocked with Ichor (dropped by bosses).
 //!
 //! Passives work through their original description lines: every "{XCurrent}% increased
 //! Spell Damage" line becomes a per-level bonus to the matching game stat (`Stat`), and the
@@ -13,6 +14,8 @@ use super::Health;
 
 /// Mastery level needed to open each tier.
 pub const TIER_LEVEL: [u32; 5] = [0, 5, 12, 20, 30];
+/// Ichor to unlock each tier (per hero and mastery).
+pub const TIER_ICHOR: [u32; 5] = [0, 1, 2, 3, 4];
 pub const SECOND_MASTERY_LEVEL: u32 = 8;
 pub const MAX_MASTERIES: usize = 2;
 /// Learned skills that cast themselves during a run.
@@ -30,7 +33,44 @@ pub fn mastery_level(profile: &Profile, book: &MasteryBook, mastery: &str) -> u3
 }
 
 pub fn tier_open(profile: &Profile, book: &MasteryBook, mastery: &str, tier: usize) -> bool {
-    mastery_level(profile, book, mastery) >= TIER_LEVEL[tier.min(TIER_LEVEL.len() - 1)]
+    tier_blocked(profile, book, mastery, tier).is_none()
+}
+
+/// Tiers above the first that the hero unlocked with Ichor in a mastery.
+pub fn tier_unlocked(profile: &Profile, mastery: &str, tier: usize) -> bool {
+    tier == 0 || profile.tiers.get(mastery).copied().unwrap_or(0) as usize >= tier
+}
+
+/// Why a tier is closed, or None.
+pub fn tier_blocked(profile: &Profile, book: &MasteryBook, mastery: &str, tier: usize) -> Option<String> {
+    let tier = tier.min(TIER_LEVEL.len() - 1);
+    if mastery_level(profile, book, mastery) < TIER_LEVEL[tier] {
+        return Some(format!("needs mastery level {}", TIER_LEVEL[tier]));
+    }
+    if !tier_unlocked(profile, mastery, tier) {
+        return Some(format!("unlock tier {} with {} Ichor (bosses drop it)", tier + 1, TIER_ICHOR[tier]));
+    }
+    None
+}
+
+/// Spends Ichor on the next tier of a mastery.
+pub fn unlock_tier(profile: &mut Profile, book: &MasteryBook, mastery: &str, tier: usize) -> Result<(), String> {
+    if tier == 0 || tier >= TIER_LEVEL.len() || tier_unlocked(profile, mastery, tier) {
+        return Err("already open".into());
+    }
+    if !tier_unlocked(profile, mastery, tier - 1) {
+        return Err(format!("unlock tier {} first", tier));
+    }
+    if mastery_level(profile, book, mastery) < TIER_LEVEL[tier] {
+        return Err(format!("needs mastery level {}", TIER_LEVEL[tier]));
+    }
+    let cost = TIER_ICHOR[tier];
+    if profile.ichor < cost {
+        return Err(format!("needs {cost} Ichor – bosses drop it"));
+    }
+    profile.ichor -= cost;
+    *profile.tiers.entry(mastery.to_string()).or_default() = tier as u32;
+    Ok(())
 }
 
 /// Whether another mastery may be chosen now.
@@ -62,8 +102,8 @@ pub fn active_blocked(profile: &Profile, book: &MasteryBook, id: &str) -> Option
     if !profile.masteries.contains(&m.id) {
         return Some(format!("choose the {} mastery", m.name));
     }
-    if !tier_open(profile, book, &m.id, tier) {
-        return Some(format!("needs mastery level {}", TIER_LEVEL[tier]));
+    if let Some(why) = tier_blocked(profile, book, &m.id, tier) {
+        return Some(why);
     }
     if profile.active_level(id) >= ACTIVE_MAX_LEVEL {
         return Some("maximum level".into());
@@ -82,8 +122,8 @@ pub fn passive_blocked(profile: &Profile, book: &MasteryBook, id: &str) -> Optio
     if !profile.masteries.contains(&m.id) {
         return Some(format!("choose the {} mastery", m.name));
     }
-    if !tier_open(profile, book, &m.id, tier) {
-        return Some(format!("needs mastery level {}", TIER_LEVEL[tier]));
+    if let Some(why) = tier_blocked(profile, book, &m.id, tier) {
+        return Some(why);
     }
     if profile.passive_level(id) >= passive.max_level.max(1) {
         return Some("maximum level".into());
@@ -122,6 +162,9 @@ pub fn refund(profile: &mut Profile, masteries: bool) {
     profile.equipped.clear();
     if masteries {
         profile.masteries.clear();
+        let spent: u32 = profile.tiers.values().map(|t| TIER_ICHOR[1..=*t as usize].iter().sum::<u32>()).sum();
+        profile.tiers.clear();
+        profile.ichor += spent;
     }
 }
 

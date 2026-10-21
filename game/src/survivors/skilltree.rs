@@ -31,6 +31,8 @@ pub enum TreeAction {
     Choose,
     Refund,
     ResetMasteries,
+    /// Unlock a tier (mastery index in the book, tier) with Ichor.
+    UnlockTier(usize, usize),
     Back,
 }
 
@@ -70,6 +72,10 @@ fn tree_input(mut clicked: ResMut<TreeClicked>, mut view: ResMut<TreeView>, mut 
                 let id = node_id(&book, n);
                 result = if n.passive { skills::learn_passive(&mut profile, &book, &id) } else { skills::learn_active(&mut profile, &book, &id) };
             }
+        }
+        TreeAction::UnlockTier(m, t) => {
+            let id = book.0[m].id.clone();
+            result = skills::unlock_tier(&mut profile, &book, &id, t);
         }
         TreeAction::OpenChooser => {
             view.chooser = true;
@@ -132,7 +138,7 @@ pub fn build(commands: &mut Commands, assets: &AssetServer, title: &TitleFont, p
         root.spawn(Node { align_items: AlignItems::Center, column_gap: Val::Px(18.0), ..default() }).with_children(|h| {
             h.spawn((Text::new("Masteries"), title.at(34.0)));
             h.spawn((
-                Text::new(format!("Active Points: {}    Passive Points: {}", profile.active_points, profile.passive_points)),
+                Text::new(format!("Active Points: {}    Passive Points: {}    Ichor: {}", profile.active_points, profile.passive_points, profile.ichor)),
                 text(22.0),
                 TextColor(GOLD),
                 Node { margin: UiRect::horizontal(Val::Px(24.0)), ..default() },
@@ -204,10 +210,28 @@ pub fn build(commands: &mut Commands, assets: &AssetServer, title: &TitleFont, p
                     for (t, tier) in m.tiers.iter().enumerate() {
                         let open = skills::tier_open(profile, book, &m.id, t);
                         c.spawn(Node { align_items: AlignItems::Center, column_gap: Val::Px(2.0), flex_grow: 1.0, ..default() }).with_children(|row| {
-                            row.spawn(Node { width: Val::Px(52.0), flex_shrink: 0.0, flex_direction: FlexDirection::Column, ..default() }).with_children(|lbl| {
+                            let level_ok = skills::mastery_level(profile, book, &m.id) >= TIER_LEVEL[t];
+                            let locked = !skills::tier_unlocked(profile, &m.id, t);
+                            let mut label = row.spawn(Node { width: Val::Px(58.0), flex_shrink: 0.0, flex_direction: FlexDirection::Column, ..default() });
+                            label.with_children(|lbl| {
                                 lbl.spawn((Text::new(format!("Tier {}", roman(t))), title.at(14.0), TextColor(if open { GOLD } else { Color::srgb(0.45, 0.43, 0.4) })));
                                 lbl.spawn((Text::new(format!("lvl {}", TIER_LEVEL[t])), text(11.0), TextColor(TEXT)));
+                                if locked {
+                                    // Unlocking needs Ichor; clickable once the level is reached.
+                                    let can = level_ok && skills::tier_unlocked(profile, &m.id, t - 1) && profile.ichor >= skills::TIER_ICHOR[t];
+                                    lbl.spawn((
+                                        Text::new(format!("{} Ichor", skills::TIER_ICHOR[t])),
+                                        text(11.0),
+                                        TextColor(if can { Color::srgb(1.0, 0.45, 0.35) } else { Color::srgb(0.55, 0.4, 0.36) }),
+                                    ));
+                                    if can {
+                                        lbl.spawn((Text::new("unlock"), title.at(12.0), TextColor(Color::srgb(1.0, 0.75, 0.4))));
+                                    }
+                                }
                             });
+                            if locked {
+                                label.observe(click(TreeAction::UnlockTier(tab, t)));
+                            }
                             for (i, a) in tier.actives.iter().enumerate().filter(|(_, a)| !a.wip) {
                                 let n = NodeRef { mastery: tab, tier: t, passive: false, index: i };
                                 let lvl = profile.active_level(&a.id);
