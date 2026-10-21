@@ -156,10 +156,10 @@ pub fn build(commands: &mut Commands, assets: &AssetServer, title: &TitleFont, p
 
         root.spawn(Node { flex_grow: 1.0, column_gap: Val::Px(14.0), min_height: Val::Px(0.0), ..default() }).with_children(|body| {
             // Left: artwork, name, level, equipped skills.
-            body.spawn(panel(assets, Node { width: Val::Px(220.0), flex_shrink: 0.0, flex_direction: FlexDirection::Column, row_gap: Val::Px(8.0), ..default() }))
-                .with_children(|l| {
+            body.spawn(panel(assets, Node { width: Val::Px(220.0), flex_shrink: 0.0, flex_direction: FlexDirection::Column, min_height: Val::Px(0.0), ..default() }))
+                .with_children(|p| ui::scroll_area(p, Node::default(), 8.0, |l| {
                     if let Some(art) = &m.icon {
-                        l.spawn((Node { width: Val::Px(184.0), height: Val::Px(184.0), ..default() }, ui::image(assets, texture(art), Color::WHITE)))
+                        l.spawn((Node { width: Val::Px(170.0), height: Val::Px(170.0), flex_shrink: 0.0, ..default() }, ui::image(assets, texture(art), Color::WHITE)))
                             .with_children(|a| {
                                 a.spawn((
                                     Node { position_type: PositionType::Absolute, width: Val::Percent(100.0), height: Val::Percent(100.0), ..default() },
@@ -190,7 +190,7 @@ pub fn build(commands: &mut Commands, assets: &AssetServer, title: &TitleFont, p
                     if profile.actives.is_empty() {
                         l.spawn((Text::new("Learn an active skill to use it in runs."), text(16.0), TextColor(TEXT)));
                     }
-                });
+                }));
 
             // Center: the five tiers, over the mastery's emblem in its colour.
             body.spawn(panel(assets, Node { flex_grow: 1.0, flex_basis: Val::Px(0.0), min_width: Val::Px(0.0), flex_direction: FlexDirection::Column, row_gap: Val::Px(4.0), overflow: Overflow::clip(), ..default() }))
@@ -228,8 +228,8 @@ pub fn build(commands: &mut Commands, assets: &AssetServer, title: &TitleFont, p
                 });
 
             // Right: details of the selected skill.
-            body.spawn(panel(assets, Node { width: Val::Px(330.0), flex_shrink: 0.0, flex_direction: FlexDirection::Column, row_gap: Val::Px(8.0), overflow: Overflow::clip(), ..default() }))
-                .with_children(|d| details(d, assets, title, profile, book, view));
+            body.spawn(panel(assets, Node { width: Val::Px(330.0), flex_shrink: 0.0, flex_direction: FlexDirection::Column, min_height: Val::Px(0.0), ..default() }))
+                .with_children(|p| ui::scroll_area(p, Node::default(), 8.0, |d| details(d, assets, title, profile, book, view)));
         });
 
         root.spawn(Node { column_gap: Val::Px(12.0), align_items: AlignItems::Center, ..default() }).with_children(|f| {
@@ -276,7 +276,7 @@ fn details(d: &mut ChildSpawnerCommands, assets: &AssetServer, title: &TitleFont
     let Some(n) = view.selected else {
         d.spawn((Text::new("Select a skill or passive."), text(20.0), TextColor(TEXT)));
         d.spawn((
-            Text::new("Active skills cast themselves during runs; level-ups in a run raise them and add their TQ2 modifiers. Passives raise your stats permanently. Points come from runs."),
+            Text::new("Learned active skills are offered on level-ups in runs (up to four per run) and then cast themselves; later level-ups raise them and add TQ2 modifiers. Passives raise your stats permanently. Points come from runs."),
             text(17.0),
             TextColor(TEXT),
         ));
@@ -387,8 +387,8 @@ fn chooser(commands: &mut Commands, assets: &AssetServer, title: &TitleFont, pro
                         .observe(click(TreeAction::Preview(i)));
                     }
                 });
-            body.spawn(panel(assets, Node { flex_grow: 1.0, flex_direction: FlexDirection::Column, row_gap: Val::Px(10.0), ..default() }))
-                .with_children(|d| match view.preview.map(|i| &book.0[i]) {
+            body.spawn(panel(assets, Node { flex_grow: 1.0, flex_direction: FlexDirection::Column, min_height: Val::Px(0.0), ..default() }))
+                .with_children(|p| ui::scroll_area(p, Node::default(), 10.0, |d| match view.preview.map(|i| &book.0[i]) {
                     Some(m) => {
                         d.spawn((Text::new(m.name.clone()), title.at(36.0), TextColor(m.color().lighter(0.35))));
                         d.spawn((Text::new(m.slogan.clone()), text(19.0), TextColor(GOLD)));
@@ -403,7 +403,7 @@ fn chooser(commands: &mut Commands, assets: &AssetServer, title: &TitleFont, pro
                     None => {
                         d.spawn((Text::new("Select a mastery to see what it offers."), text(20.0), TextColor(TEXT)));
                     }
-                });
+                }));
         });
         root.spawn(Node { column_gap: Val::Px(12.0), align_items: AlignItems::Center, ..default() }).with_children(|f| {
             f.spawn(button(assets, "Back (Esc)", 200.0, true, false)).observe(click(TreeAction::Back));

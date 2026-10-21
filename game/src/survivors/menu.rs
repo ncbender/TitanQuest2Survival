@@ -275,11 +275,11 @@ fn show_page(
                 if profile.created {
                     p.spawn((Text::new("Your other heroes and the shared stash are kept."), text(16.0), TextColor(TEXT)));
                 }
-                p.spawn(Node { column_gap: Val::Px(12.0), margin: UiRect::top(Val::Px(16.0)), flex_grow: 1.0, align_items: AlignItems::FlexStart, height: Val::Px(360.0), ..default() }).with_children(|row| {
+                p.spawn(Node { column_gap: Val::Px(12.0), margin: UiRect::top(Val::Px(16.0)), flex_grow: 1.0, align_items: AlignItems::Stretch, max_height: Val::Px(420.0), ..default() }).with_children(|row| {
                     for (i, w) in WEAPONS.iter().enumerate() {
                         let reach = if w.kind == AttackKind::Sweep { format!("{:.1} m reach", w.speed_or_radius) } else { format!("{:.0} m range", w.range) };
                         let hands = if w.two_handed { "Two-handed" } else { "One-handed" };
-                        row.spawn(panel(&assets, Node { width: Val::Px(234.0), height: Val::Px(350.0), flex_direction: FlexDirection::Column, align_items: AlignItems::Center, row_gap: Val::Px(8.0), ..default() }))
+                        row.spawn(panel(&assets, Node { width: Val::Px(234.0), min_height: Val::Px(350.0), flex_direction: FlexDirection::Column, align_items: AlignItems::Center, row_gap: Val::Px(8.0), ..default() }))
                             .with_children(|c| {
                                 c.spawn((Text::new(format!("{}", i + 1)), title.at(20.0), TextColor(GOLD)));
                                 c.spawn((Node { width: Val::Px(70.0), height: Val::Px(124.0), flex_shrink: 0.0, ..default() }, ImageNode { image_mode: NodeImageMode::Auto, ..ImageNode::new(assets.load(Item::Weapon(w).icon())) }));

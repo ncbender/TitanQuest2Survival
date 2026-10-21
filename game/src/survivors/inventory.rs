@@ -420,7 +420,9 @@ fn details(d: &mut ChildSpawnerCommands, assets: &AssetServer, title: &TitleFont
     headline(d, assets, title, if shown.is_some() { "Anvil" } else { "Attributes" }, 22.0);
     match shown {
         Some(inst) => {
-            ui::item_card(d, assets, title, inst, affixes, 252.0, None, |_| {});
+            ui::scroll_area(d, Node { max_height: Val::Px(420.0), flex_grow: 0.0, flex_basis: Val::Auto, ..default() }, 0.0, |list| {
+                ui::item_card(list, assets, title, inst, affixes, 240.0, None, |_| {});
+            });
             if Some(inst.uid) == state.selected && state.hover.is_none_or(|h| h == inst.uid) {
                 let uid = inst.uid;
                 let worn = worn_slot(profile, uid);
@@ -450,9 +452,7 @@ fn details(d: &mut ChildSpawnerCommands, assets: &AssetServer, title: &TitleFont
         None => {
             // Nothing selected: the hero's numbers at the start of a run.
             let (stats, hp, eq) = super::charstats::starting(profile, book, affixes);
-            d.spawn(Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, flex_basis: Val::Px(0.0), min_height: Val::Px(0.0), overflow: Overflow::scroll_y(), ..default() })
-                .insert(ScrollArea)
-                .with_children(|list| super::charstats::sheet(list, title, &stats, &hp, &eq, 236.0));
+            ui::scroll_area(d, Node::default(), 0.0, |list| super::charstats::sheet(list, title, &stats, &hp, &eq, 226.0));
             d.spawn((Text::new("Click an item to upgrade or recycle it."), text(13.0), TextColor(TEXT)));
         }
     }

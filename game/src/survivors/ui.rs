@@ -4,6 +4,7 @@
 //! Colours: panels are warm dark brown (never black) so cream text and TQ2's dark icon art
 //! stay readable on them.
 use bevy::prelude::*;
+use bevy::ui_widgets::{ControlOrientation, ScrollArea, Scrollbar, ScrollbarThumb};
 
 use super::mastery_data::{ui_texture, TEXT};
 
@@ -71,6 +72,49 @@ pub fn backdrop(assets: &AssetServer, marker: impl Component) -> impl Bundle {
         ],
         marker,
     )
+}
+
+/// A column whose content scrolls (mouse wheel or dragging the gold bar) when it is taller than
+/// the space the column gets; the bar only shows then. `node` sizes the whole area (give it a
+/// width or flex_grow); the content is laid out top to bottom with `gap` between items.
+pub fn scroll_area(parent: &mut ChildSpawnerCommands, node: Node, gap: f32, content: impl FnOnce(&mut ChildSpawnerCommands)) {
+    parent.spawn(Node { column_gap: Val::Px(6.0), min_height: Val::Px(0.0), flex_basis: Val::Px(0.0), flex_grow: 1.0, ..node }).with_children(|area| {
+        let list = area
+            .spawn((
+                Node {
+                    flex_direction: FlexDirection::Column,
+                    row_gap: Val::Px(gap),
+                    flex_grow: 1.0,
+                    min_width: Val::Px(0.0),
+                    min_height: Val::Px(0.0),
+                    overflow: Overflow::scroll_y(),
+                    ..default()
+                },
+                ScrollArea,
+            ))
+            .with_children(content)
+            .id();
+        area.spawn((
+            Node { width: Val::Px(7.0), flex_shrink: 0.0, ..default() },
+            BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.35)),
+            Scrollbar::new(list, ControlOrientation::Vertical, 24.0),
+            Visibility::Hidden,
+        ))
+        .with_children(|bar| {
+            bar.spawn((ScrollbarThumb { border_radius: BorderRadius::all(Val::Px(3.0)), ..default() }, BackgroundColor(super::mastery_data::GOLD.with_alpha(0.8))));
+        });
+    });
+}
+
+/// Shows a scroll area's bar only while its content overflows.
+pub fn show_scrollbars(mut bars: Query<(&Scrollbar, &mut Visibility)>, nodes: Query<&ComputedNode>) {
+    for (bar, mut vis) in &mut bars {
+        let Ok(node) = nodes.get(bar.target) else { continue };
+        let wanted = if node.content_size().y > node.size().y + 1.0 { Visibility::Inherited } else { Visibility::Hidden };
+        if *vis != wanted {
+            *vis = wanted;
+        }
+    }
 }
 
 /// A panel: brown stone in a gold frame. The padding keeps content clear of the frame art.
