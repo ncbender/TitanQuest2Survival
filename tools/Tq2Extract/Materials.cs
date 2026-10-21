@@ -113,6 +113,14 @@ class MaterialLibrary(DefaultFileProvider provider, string outDir)
                    ?? real.FirstOrDefault(t => t.texture.Name.EndsWith(slot.suffix, StringComparison.OrdinalIgnoreCase)).texture);
 
         var albedo = Pick(Albedo);
+        // Equipment albedos are grey: Grim tints them per material zone (ID map) with a colour
+        // scheme at runtime. Bake TQ2's item-icon scheme into a dyed copy.
+        var idMap = real.FirstOrDefault(t => t.key == "id").texture;
+        var albedoTex = real.FirstOrDefault(t => Albedo.exact.Contains(t.key)).texture;
+        string? dyedOrm = null;
+        if (idMap != null && albedoTex != null && chain.Any(c => c.StartsWith("m_master_equipment", StringComparison.OrdinalIgnoreCase))
+            && Dye.Bake(provider, albedoTex, idMap, outDir) is { } dyed)
+            (albedo, dyedOrm) = dyed;
         // Tiling master textures are tinted by the family's Color/Tint parameters (e.g. rocks).
         var color = new float[] { 1, 1, 1, 1 };
         if (vec.TryGetValue("Color", out var c) && !tex.Any(t => t.key is "albedo" && t.texture.Name.EndsWith("_a")))
@@ -127,11 +135,11 @@ class MaterialLibrary(DefaultFileProvider provider, string outDir)
             "EBlendMode::BLEND_Translucent" or "EBlendMode::BLEND_Additive" => "blend",
             _ => "opaque",
         };
-        var def = new Def(albedo, Pick(Normal), Pick(Orm), color,
+        var def = new Def(albedo, Pick(Normal), dyedOrm ?? Pick(Orm), color,
             scl.GetValueOrDefault("UV Scale", 1f), alpha, cutoff ?? 0.3333f, twoSided ?? false, string.Join(" > ", chain));
         // Hair colour comes from the archetype at runtime; the master's own texture is just
         // a layered noise. Render Grim hair as a plain dark colour instead.
-        if (chain[^1].Equals("m_human_hair_master", StringComparison.OrdinalIgnoreCase) && def.albedo?.Contains("t_3noise") == true)
+        if (chain[^1].Equals("m_human_hair_master", StringComparison.OrdinalIgnoreCase) && def.albedo?.Contains("t_3noise") == true && !Overrides.ContainsKey(name))
             def = def with { albedo = null, color = [0.07f, 0.05f, 0.035f, 1f] };
         if (Overrides.TryGetValue(name, out var o))
         {
@@ -178,6 +186,7 @@ class MaterialLibrary(DefaultFileProvider provider, string outDir)
                     png = image.Encode(SkiaSharp.SKEncodedImageFormat.Png, 100).ToArray();
                 }
                 else png = decoded.Encode(ETextureFormat.Png, false, out _);
+                if (texture.Name.EndsWith("_nm", StringComparison.OrdinalIgnoreCase)) png = RebuildNormalZ(png);
                 rel = $"textures/{texture.Name}.png";
                 Directory.CreateDirectory(Path.Combine(outDir, "textures"));
                 File.WriteAllBytes(Path.Combine(outDir, rel), png);
@@ -185,6 +194,23 @@ class MaterialLibrary(DefaultFileProvider provider, string outDir)
         }
         catch (Exception ex) { Console.WriteLine($"  texture {texture.Name}: {ex.GetType().Name} {ex.Message}"); }
         return textures[texture.Name] = rel;
+    }
+
+    /// Grim's skin "_nm" maps keep only X/Y in R/G (blue holds another mask); rebuild Z so
+    /// standard tangent-space shading works.
+    static byte[] RebuildNormalZ(byte[] png)
+    {
+        using var bmp = SkiaSharp.SKBitmap.Decode(png);
+        for (int y = 0; y < bmp.Height; y++)
+            for (int x = 0; x < bmp.Width; x++)
+            {
+                var c = bmp.GetPixel(x, y);
+                float nx = c.Red / 127.5f - 1, ny = c.Green / 127.5f - 1;
+                float nz = MathF.Sqrt(MathF.Max(0, 1 - nx * nx - ny * ny));
+                bmp.SetPixel(x, y, new SkiaSharp.SKColor(c.Red, c.Green, (byte)Math.Round((nz + 1) * 127.5f), 255));
+            }
+        using var image = SkiaSharp.SKImage.FromBitmap(bmp);
+        return image.Encode(SkiaSharp.SKEncodedImageFormat.Png, 100).ToArray();
     }
 
     public void Save()

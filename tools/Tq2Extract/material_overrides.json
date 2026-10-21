@@ -13,5 +13,17 @@
   },
   "mi_proxy_cloth_torso": {
     "hidden": true
+  },
+  "mi_human_hair_smooth": {
+    "albedo": "t_human_hair_01_a",
+    "color": [
+      0.16,
+      0.1,
+      0.06,
+      1.0
+    ]
+  },
+  "mi_human_eye_occlusion_01": {
+    "hidden": true
   }
 }

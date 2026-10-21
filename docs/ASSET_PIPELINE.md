@@ -125,6 +125,19 @@ The `textures` section of `tools/assets.json` exports loose textures by name (e.
 the rest smoke. `game/src/vfx.rs` shows cells as camera-facing unlit quads (`uv_transform`
 selects the cell).
 
+## Character look (dye, skin normals, hair)
+
+- Equipment albedos are grey; `m_master_equipment_2` tints them per zone from the ID texture
+  (R = leather/wood/crest, G = cloth/accent/fur, B = metal/bone/gem; levels ≈ 64/128/192/255)
+  with a colour scheme (`GrimArchetypeModificationSelection`). `Dye.cs` bakes the scheme TQ2
+  uses for item icons (`ms_item_equipment_color`, entry "battlemage") into `<albedo>_dyed.png`
+  (albedo × tint × 2, linear) plus an ORM (metal zones metallic) — verified against TQ2's icon
+  of the same armour.
+- Skin `_nm` maps keep only X/Y (blue is another mask); Z is rebuilt on export, otherwise skin
+  shows dark blotches.
+- Hair uses TQ2's shared strand texture `t_human_hair_01_a` tinted brown; the eye-occlusion
+  layer is hidden (it is a translucent shadow in TQ2).
+
 ## Masteries (skill tree)
 
 `dotnet run -- masteries` (also part of `assets`) writes `cache/export/masteries/masteries.json`
