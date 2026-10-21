@@ -51,7 +51,7 @@ impl EnemyGrid {
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct EnemySet;
 
-#[derive(Resource)]
+#[derive(Resource, Default)]
 struct Director {
     spawn_timer: f32,
     bosses_spawned: usize,
@@ -59,11 +59,16 @@ struct Director {
 
 pub fn plugin(app: &mut App) {
     app.init_resource::<EnemyGrid>()
-        .insert_resource(Director { spawn_timer: 0.0, bosses_spawned: 0 })
+        .init_resource::<Director>()
         .add_systems(
             FixedUpdate,
             (rebuild_grid, spawn_waves, chase_and_attack).chain().in_set(EnemySet).run_if(in_state(GameState::Playing)),
         );
+}
+
+/// Fresh wave director for a new run.
+pub fn reset(commands: &mut Commands) {
+    commands.insert_resource(Director::default());
 }
 
 fn rebuild_grid(mut grid: ResMut<EnemyGrid>, enemies: Query<(Entity, &Pos, &Radius), With<Enemy>>) {

@@ -8,6 +8,7 @@
 //! env TQ2_TEST_GALLERY=1: spawn one of every enemy type next to the hero
 //! env TQ2_BENCH=<n>: spawn n enemies, measure 10 s of frame times into cache/bench.txt, exit
 mod character;
+mod fonts;
 mod ground;
 mod obstacles;
 mod survivors;
@@ -35,6 +36,7 @@ fn main() {
     .add_plugins((tq2_materials::Tq2MaterialsPlugin, character::CharacterPlugin))
     .add_systems(Update, auto_screenshot);
 
+    fonts::install(&mut app, EXPORT_ROOT);
     load_world(&mut app, &scene);
     app.add_plugins(SurvivorsPlugin).run();
 }

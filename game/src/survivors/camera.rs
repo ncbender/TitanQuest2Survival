@@ -3,6 +3,8 @@ use bevy::input::mouse::MouseWheel;
 use bevy::prelude::*;
 
 use super::player::Hero;
+use super::Arena;
+use crate::ground::Ground;
 use crate::tq2_scene::MapProp;
 
 #[derive(Component)]
@@ -42,6 +44,8 @@ fn follow(
     time: Res<Time>,
     keys: Res<ButtonInput<KeyCode>>,
     mut wheel: MessageReader<MouseWheel>,
+    arena: Res<Arena>,
+    ground: Res<Ground>,
     hero: Query<&Transform, (With<Hero>, Without<CameraRig>)>,
     mut cam: Query<(&mut Transform, &mut CameraRig)>,
 ) {
@@ -54,6 +58,10 @@ fn follow(
     if let Ok(hero) = hero.single() {
         let lerp = (8.0 * dt).min(1.0);
         rig.focus = rig.focus.lerp(hero.translation, lerp);
+    } else {
+        // Main menu: slowly circle the arena.
+        rig.yaw += 0.08 * dt;
+        rig.focus = Vec3::new(arena.start.x, ground.stand(arena.start), arena.start.y);
     }
     let offset = Vec3::new(rig.yaw.sin() * rig.pitch.cos(), rig.pitch.sin(), rig.yaw.cos() * rig.pitch.cos()) * rig.distance;
     *t = Transform::from_translation(rig.focus + offset).looking_at(rig.focus, Vec3::Y);

@@ -98,5 +98,9 @@
   },
   "scenes": {
     "menu2": "TQ2/Content/TQ2/Maps/menu/l_main_menu_scene_02.umap"
+  },
+  "fonts": {
+    "title": "TQ2/Content/TQ2/Core/UI/Fonts/Cinzel/fontface_cinzel_bold.ufont",
+    "text": "TQ2/Content/TQ2/Core/UI/Fonts/EBGaramond/fontface_EBGaramond-Bold.ufont"
   }
 }

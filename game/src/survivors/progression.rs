@@ -48,7 +48,7 @@ impl Upgrade {
             Upgrade::Crit => "Kritisches Auge: +8 % Krit-Chance".into(),
             Upgrade::Vitality => "Vitalität: +20 max. Leben, volle Heilung".into(),
             Upgrade::Magnet => "Anziehung: +50 % Sammelradius".into(),
-            Upgrade::Nova if stats.nova_level == 0 => "Neue Fähigkeit - Nova: Schockwelle um dich herum".into(),
+            Upgrade::Nova if stats.nova_level == 0 => "Neue Fähigkeit – Nova: Schockwelle um dich herum".into(),
             Upgrade::Nova => format!("Nova Stufe {}: mehr Schaden, Radius, Tempo", stats.nova_level + 1),
         }
     }

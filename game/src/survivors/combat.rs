@@ -55,6 +55,11 @@ pub fn plugin(app: &mut App) {
         .add_systems(Update, (place_projectiles, fade_dying, animate_nova));
 }
 
+/// Fresh weapon cooldowns for a new run.
+pub fn reset(commands: &mut Commands) {
+    commands.insert_resource(Weapons::default());
+}
+
 fn roll_damage(base: f32, stats: &HeroStats) -> f32 {
     let crit = if fastrand::f32() < stats.crit { 2.0 } else { 1.0 };
     base * stats.damage * crit

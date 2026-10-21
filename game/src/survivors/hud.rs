@@ -4,8 +4,12 @@ use bevy::prelude::*;
 use super::player::{Hero, HeroStats};
 use super::progression::Offer;
 use super::{GameState, Health, Run};
+use crate::fonts::TitleFont;
 use crate::survivors::enemies::Enemy;
 
+/// Root of the always-on HUD (hidden in the main menu).
+#[derive(Component)]
+struct HudRoot;
 #[derive(Component)]
 struct LifeFill;
 #[derive(Component)]
@@ -23,7 +27,7 @@ struct EndPanel;
 pub fn plugin(app: &mut App) {
     app.init_resource::<ClickedChoice>()
         .add_systems(Startup, spawn_hud)
-        .add_systems(Update, update_hud)
+        .add_systems(Update, (update_hud, hud_visibility))
         .add_systems(OnEnter(GameState::LevelUp), show_level_up)
         .add_systems(OnExit(GameState::LevelUp), despawn::<LevelUpPanel>)
         .add_systems(Update, choose_upgrade.run_if(in_state(GameState::LevelUp)))
@@ -42,6 +46,7 @@ fn bar(color: Color, marker: impl Component) -> impl Bundle {
 fn spawn_hud(mut commands: Commands) {
     commands.spawn((
         Node { position_type: PositionType::Absolute, left: Val::Px(16.0), top: Val::Px(16.0), flex_direction: FlexDirection::Column, ..default() },
+        HudRoot,
         children![
             bar(Color::srgb(0.75, 0.12, 0.1), LifeFill),
             bar(Color::srgb(0.35, 0.7, 1.0), XpFill),
@@ -83,6 +88,15 @@ Boss: {} {:.0} %", e.def.name, hp.hp / hp.max * 100.0))
     }
 }
 
+fn hud_visibility(state: Res<State<GameState>>, mut hud: Query<&mut Visibility, With<HudRoot>>) {
+    let wanted = if *state.get() == GameState::MainMenu { Visibility::Hidden } else { Visibility::Inherited };
+    for mut v in &mut hud {
+        if *v != wanted {
+            *v = wanted;
+        }
+    }
+}
+
 fn panel(marker: impl Component) -> impl Bundle {
     (
         Node {
@@ -100,9 +114,9 @@ fn panel(marker: impl Component) -> impl Bundle {
     )
 }
 
-fn show_level_up(mut commands: Commands, offer: Res<Offer>, stats: Res<HeroStats>, run: Res<Run>) {
+fn show_level_up(mut commands: Commands, offer: Res<Offer>, stats: Res<HeroStats>, run: Res<Run>, title: Res<TitleFont>) {
     commands.spawn(panel(LevelUpPanel)).with_children(|p| {
-        p.spawn((Text::new(format!("Stufe {} erreicht - wähle (1-3)", run.level)), TextFont { font_size: FontSize::Px(32.0), ..default() }));
+        p.spawn((Text::new(format!("Stufe {} erreicht – wähle (1–3)", run.level)), title.at(36.0)));
         for (i, upgrade) in offer.0.iter().enumerate() {
             p.spawn((
                 Node { width: Val::Px(560.0), padding: UiRect::all(Val::Px(14.0)), ..default() },
@@ -134,12 +148,12 @@ fn choose_upgrade(
     next.set(GameState::Playing);
 }
 
-fn show_end(mut commands: Commands, run: Res<Run>) {
+fn show_end(mut commands: Commands, run: Res<Run>, title_font: Res<TitleFont>) {
     let title = if run.won { "Überlebt! Die Titanen sind beeindruckt." } else { "Gefallen." };
     commands.spawn(panel(EndPanel)).with_children(|p| {
-        p.spawn((Text::new(title), TextFont { font_size: FontSize::Px(40.0), ..default() }));
+        p.spawn((Text::new(title), title_font.at(44.0)));
         p.spawn((
-            Text::new(format!("Stufe {}   Besiegt: {}   Zeit {:02}:{:02}\n\nR - Neustart", run.level, run.kills, run.time as u32 / 60, run.time as u32 % 60)),
+            Text::new(format!("Stufe {}   Besiegt: {}   Zeit {:02}:{:02}\n\nR – Neustart     M – Hauptmenü", run.level, run.kills, run.time as u32 / 60, run.time as u32 % 60)),
             TextFont { font_size: FontSize::Px(24.0), ..default() },
         ));
     });

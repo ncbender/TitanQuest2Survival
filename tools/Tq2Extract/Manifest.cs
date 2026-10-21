@@ -6,7 +6,8 @@ using Newtonsoft.Json;
 static class Manifest
 {
     record Character(string[] parts, string skeleton, string[] anims, string[]? clips);
-    record File(Dictionary<string, Character> characters, Dictionary<string, string[]> props, Dictionary<string, string> scenes);
+    record File(Dictionary<string, Character> characters, Dictionary<string, string[]> props, Dictionary<string, string> scenes,
+                Dictionary<string, string>? fonts);
 
     public static async Task Run(DefaultFileProvider provider, string root, string cache, string[] only)
     {
@@ -30,6 +31,17 @@ static class Manifest
             var library = new MaterialLibrary(provider, dir);
             library.AddFromMeshes(Directory.EnumerateFiles(dir, "*.glb", SearchOption.AllDirectories));
             library.Save();
+        }
+        // TQ2's UI fonts -> cache/export/fonts/<name>.ttf. A .ufont is the TrueType file behind an
+        // int32 length prefix.
+        foreach (var (name, path) in (manifest.fonts ?? []).Where(f => Wanted("fonts") || Wanted(f.Key)))
+        {
+            var dir = Path.Combine(cache, "export", "fonts");
+            Directory.CreateDirectory(dir);
+            var raw = provider.Files[path].Read();
+            var length = BitConverter.ToInt32(raw, 0);
+            System.IO.File.WriteAllBytes(Path.Combine(dir, name + ".ttf"), raw.AsSpan(4, Math.Min(length, raw.Length - 4)).ToArray());
+            Console.WriteLine($"font {name} <- {path}");
         }
         foreach (var (name, map) in manifest.scenes.Where(s => Wanted(s.Key)))
         {

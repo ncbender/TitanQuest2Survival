@@ -7,6 +7,7 @@ mod camera;
 mod combat;
 mod enemies;
 mod hud;
+mod menu;
 mod player;
 mod progression;
 
@@ -61,10 +62,16 @@ pub mod config {
 #[derive(States, Default, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum GameState {
     #[default]
+    MainMenu,
     Playing,
     LevelUp,
+    Paused,
     GameOver,
 }
+
+/// Starts a fresh run from any state (menu, end screen, tests).
+#[derive(Message)]
+pub struct StartRun;
 
 /// Position on the ground plane (world x, z). Height comes from `Ground`.
 #[derive(Component, Default, Clone, Copy)]
@@ -109,18 +116,56 @@ impl Plugin for SurvivorsPlugin {
     fn build(&self, app: &mut App) {
         app.init_state::<GameState>()
             .init_resource::<Run>()
-            .add_plugins((camera::plugin, player::plugin, enemies::plugin, combat::plugin, progression::plugin, hud::plugin, bench::plugin))
-            .add_systems(Startup, start_run)
-            .add_systems(Update, (follow_ground, restart).chain());
+            .add_message::<StartRun>()
+            .add_plugins((camera::plugin, player::plugin, enemies::plugin, combat::plugin, progression::plugin, hud::plugin))
+            .add_plugins((menu::plugin, bench::plugin))
+            .add_systems(Startup, skip_menu_in_tests)
+            .add_systems(OnEnter(GameState::MainMenu), clear_run)
+            .add_systems(Update, (start_run, follow_ground, restart).chain());
     }
 }
 
-fn start_run(mut commands: Commands, mut run: ResMut<Run>, mut stats: ResMut<player::HeroStats>, arena: Res<Arena>) {
+/// Automated tests (screenshots, autoplay, benchmarks) start a run without the menu.
+fn skip_menu_in_tests(mut start: MessageWriter<StartRun>) {
+    let tests = ["TQ2_SCREENSHOT", "TQ2_AUTOPLAY", "TQ2_BENCH", "TQ2_TEST_GALLERY"];
+    // TQ2_MENU=1 keeps the menu (for screenshots of it).
+    if std::env::var_os("TQ2_MENU").is_none() && tests.iter().any(|v| std::env::var_os(v).is_some()) {
+        start.write(StartRun);
+    }
+}
+
+/// Resets every piece of run state and spawns the hero.
+fn start_run(
+    mut commands: Commands,
+    mut requests: MessageReader<StartRun>,
+    mut next: ResMut<NextState<GameState>>,
+    mut run: ResMut<Run>,
+    mut stats: ResMut<player::HeroStats>,
+    arena: Res<Arena>,
+    entities: Query<Entity, With<RunEntity>>,
+) {
+    if requests.read().count() == 0 {
+        return;
+    }
+    for e in &entities {
+        commands.entity(e).despawn();
+    }
     *run = Run { level: 1, xp_next: progression::xp_for_level(1), ..default() };
+    *stats = player::HeroStats::default();
     if std::env::var_os("TQ2_TEST_NOVA").is_some() {
         stats.nova_level = 1; // test hook: Nova from the start
     }
+    enemies::reset(&mut commands);
+    combat::reset(&mut commands);
     player::spawn_hero(&mut commands, arena.start);
+    next.set(GameState::Playing);
+}
+
+/// Back in the menu, the arena is empty again.
+fn clear_run(mut commands: Commands, entities: Query<Entity, With<RunEntity>>) {
+    for e in &entities {
+        commands.entity(e).despawn();
+    }
 }
 
 /// Places every simulated unit on the terrain and turns it towards where it moves.
@@ -140,24 +185,8 @@ fn follow_ground(
     }
 }
 
-fn restart(
-    mut commands: Commands,
-    keys: Res<ButtonInput<KeyCode>>,
-    state: Res<State<GameState>>,
-    mut next: ResMut<NextState<GameState>>,
-    mut run: ResMut<Run>,
-    mut stats: ResMut<player::HeroStats>,
-    arena: Res<Arena>,
-    entities: Query<Entity, With<RunEntity>>,
-) {
-    if *state.get() != GameState::GameOver || !keys.just_pressed(KeyCode::KeyR) {
-        return;
+fn restart(keys: Res<ButtonInput<KeyCode>>, state: Res<State<GameState>>, mut start: MessageWriter<StartRun>) {
+    if *state.get() == GameState::GameOver && keys.just_pressed(KeyCode::KeyR) {
+        start.write(StartRun);
     }
-    for e in &entities {
-        commands.entity(e).despawn();
-    }
-    *run = Run { level: 1, xp_next: progression::xp_for_level(1), ..default() };
-    *stats = player::HeroStats::default();
-    player::spawn_hero(&mut commands, arena.start);
-    next.set(GameState::Playing);
 }
