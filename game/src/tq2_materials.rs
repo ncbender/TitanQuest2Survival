@@ -25,13 +25,16 @@ struct Def {
     alpha: String,
     cutoff: f32,
     two_sided: bool,
+    /// Proxy geometry TQ2 never shows.
+    #[serde(default)]
+    hidden: bool,
 }
 
 #[derive(Resource, Default)]
 pub struct MaterialLibrary {
     /// material name -> (export dir, definition)
     defs: HashMap<String, (String, Def)>,
-    built: HashMap<String, Handle<StandardMaterial>>,
+    built: HashMap<String, (Handle<StandardMaterial>, bool)>,
 }
 
 impl MaterialLibrary {
@@ -50,7 +53,8 @@ impl MaterialLibrary {
         }
     }
 
-    fn get(&mut self, name: &str, assets: &AssetServer, materials: &mut Assets<StandardMaterial>) -> Option<Handle<StandardMaterial>> {
+    /// The shared material for a TQ2 material name, and whether it should be hidden.
+    fn get(&mut self, name: &str, assets: &AssetServer, materials: &mut Assets<StandardMaterial>) -> Option<(Handle<StandardMaterial>, bool)> {
         let key = name.to_lowercase();
         if let Some(h) = self.built.get(&key) {
             return Some(h.clone());
@@ -94,15 +98,15 @@ impl MaterialLibrary {
             mat.perceptual_roughness = 1.0;
             mat.metallic = 1.0;
         }
-        if def.albedo.is_none() {
+        if def.albedo.is_none() && (key.contains("worldgrid") || key.contains("water")) {
             // Engine grid / water placeholders: render as calm translucent water.
             mat.base_color = Color::linear_rgba(0.05, 0.12, 0.16, 0.75);
             mat.alpha_mode = AlphaMode::Blend;
             mat.perceptual_roughness = 0.1;
         }
-        let handle = materials.add(mat);
-        self.built.insert(key, handle.clone());
-        Some(handle)
+        let entry = (materials.add(mat), def.hidden);
+        self.built.insert(key, entry.clone());
+        Some(entry)
     }
 }
 
@@ -110,11 +114,14 @@ fn apply_materials(
     mut library: ResMut<MaterialLibrary>,
     assets: Res<AssetServer>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    mut query: Query<(&GltfMaterialName, &mut MeshMaterial3d<StandardMaterial>), Added<GltfMaterialName>>,
+    mut query: Query<(&GltfMaterialName, &mut MeshMaterial3d<StandardMaterial>, &mut Visibility), Added<GltfMaterialName>>,
 ) {
-    for (name, mut material) in &mut query {
-        if let Some(handle) = library.get(&name.0, &assets, &mut materials) {
+    for (name, mut material, mut visibility) in &mut query {
+        if let Some((handle, hidden)) = library.get(&name.0, &assets, &mut materials) {
             material.0 = handle;
+            if hidden {
+                *visibility = Visibility::Hidden;
+            }
         }
     }
 }

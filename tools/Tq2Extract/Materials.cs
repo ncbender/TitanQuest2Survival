@@ -12,14 +12,27 @@ using SharpGLTF.Schema2;
 
 // Resolves TQ2 material instance chains (child parameters override parents) into a
 // flat description the game turns into one shared StandardMaterial per material:
-//   <outDir>/materials.json   name -> { albedo, normal, orm, color, uv_scale, alpha, cutoff, two_sided }
+//   <outDir>/materials.json   name -> { albedo, normal, orm, color, uv_scale, alpha, cutoff, two_sided, hidden }
 //   <outDir>/textures/*.png   every referenced texture exported once
 // Grim master materials are procedural (masks, gradients, detail textures); this is an
 // approximation built from the original texture maps, not a shader port.
+// material_overrides.json supplies looks TQ2 assigns at runtime (archetype skin/hair, proxies).
 class MaterialLibrary(DefaultFileProvider provider, string outDir)
 {
     public record Def(string? albedo, string? normal, string? orm, float[] color, float uv_scale,
-                      string alpha, float cutoff, bool two_sided, string chain);
+                      string alpha, float cutoff, bool two_sided, string chain, bool hidden = false);
+
+    record Override(string? albedo, string? normal, string? orm, float[]? color, bool hidden, int slice);
+    static readonly Dictionary<string, Override> Overrides = LoadOverrides();
+
+    static Dictionary<string, Override> LoadOverrides()
+    {
+        var path = Path.Combine(AppContext.BaseDirectory, "material_overrides.json");
+        if (!File.Exists(path)) return new();
+        return JsonConvert.DeserializeObject<Dictionary<string, Newtonsoft.Json.Linq.JToken>>(File.ReadAllText(path))!
+            .Where(kv => !kv.Key.StartsWith('_'))
+            .ToDictionary(kv => kv.Key, kv => kv.Value.ToObject<Override>()!, StringComparer.OrdinalIgnoreCase);
+    }
 
     readonly Dictionary<string, Def?> defs = new(StringComparer.OrdinalIgnoreCase);
     readonly Dictionary<string, string?> textures = new(StringComparer.OrdinalIgnoreCase);
@@ -116,10 +129,26 @@ class MaterialLibrary(DefaultFileProvider provider, string outDir)
         };
         var def = new Def(albedo, Pick(Normal), Pick(Orm), color,
             scl.GetValueOrDefault("UV Scale", 1f), alpha, cutoff ?? 0.3333f, twoSided ?? false, string.Join(" > ", chain));
+        if (Overrides.TryGetValue(name, out var o))
+        {
+            string? Tex(string? asset) => asset == null ? null
+                : Export(packagesByName[asset].Select(p => provider.LoadPackage(p).GetExports().OfType<UTexture>().FirstOrDefault()).FirstOrDefault(t => t != null), o.slice);
+            def = def with
+            {
+                albedo = o.albedo != null ? Tex(o.albedo) : def.albedo,
+                normal = o.normal != null ? Tex(o.normal) : def.normal,
+                orm = o.orm != null ? Tex(o.orm) : def.orm,
+                color = o.color ?? def.color,
+                hidden = o.hidden,
+                chain = def.chain + " (override)",
+            };
+        }
         return defs[name] = def;
     }
 
-    string? Export(UTexture? texture)
+    /// Exports a texture once. Grim packs variants (e.g. 9 skin tones) side by side into one
+    /// virtual texture whose UVs cover a single block; only block `slice` is kept.
+    string? Export(UTexture? texture, int slice = 0)
     {
         if (texture == null) return null;
         if (textures.TryGetValue(texture.Name, out var done)) return done;
@@ -129,7 +158,18 @@ class MaterialLibrary(DefaultFileProvider provider, string outDir)
             var decoded = texture.Decode(ETexturePlatform.DesktopMobile);
             if (decoded != null)
             {
-                var png = decoded.Encode(ETextureFormat.Png, false, out _);
+                byte[] png;
+                int blocks = decoded.Height > 0 ? decoded.Width / decoded.Height : 1;
+                if (texture.GetOrDefault<bool>("VirtualTextureStreaming") && blocks > 1 && decoded.Width == blocks * decoded.Height)
+                {
+                    using var full = decoded.ToSkBitmap();
+                    using var block = new SkiaSharp.SKBitmap();
+                    var x = Math.Clamp(slice, 0, blocks - 1) * decoded.Height;
+                    full.ExtractSubset(block, new SkiaSharp.SKRectI(x, 0, x + decoded.Height, decoded.Height));
+                    using var image = SkiaSharp.SKImage.FromBitmap(block);
+                    png = image.Encode(SkiaSharp.SKEncodedImageFormat.Png, 100).ToArray();
+                }
+                else png = decoded.Encode(ETextureFormat.Png, false, out _);
                 rel = $"textures/{texture.Name}.png";
                 Directory.CreateDirectory(Path.Combine(outDir, "textures"));
                 File.WriteAllBytes(Path.Combine(outDir, rel), png);

@@ -1,0 +1,144 @@
+//! HUD (life, XP, level, time, kills), level-up choice panel and end screen.
+use bevy::prelude::*;
+
+use super::player::{Hero, HeroStats};
+use super::progression::Offer;
+use super::{GameState, Health, Run};
+use crate::survivors::enemies::Enemy;
+
+#[derive(Component)]
+struct LifeFill;
+#[derive(Component)]
+struct XpFill;
+#[derive(Component)]
+struct StatusText;
+#[derive(Component)]
+struct LevelUpPanel;
+/// Upgrade picked by mouse click this frame (keys 1-3 are read directly).
+#[derive(Resource, Default)]
+struct ClickedChoice(Option<usize>);
+#[derive(Component)]
+struct EndPanel;
+
+pub fn plugin(app: &mut App) {
+    app.init_resource::<ClickedChoice>()
+        .add_systems(Startup, spawn_hud)
+        .add_systems(Update, update_hud)
+        .add_systems(OnEnter(GameState::LevelUp), show_level_up)
+        .add_systems(OnExit(GameState::LevelUp), despawn::<LevelUpPanel>)
+        .add_systems(Update, choose_upgrade.run_if(in_state(GameState::LevelUp)))
+        .add_systems(OnEnter(GameState::GameOver), show_end)
+        .add_systems(OnExit(GameState::GameOver), despawn::<EndPanel>);
+}
+
+fn bar(color: Color, marker: impl Component) -> impl Bundle {
+    (
+        Node { width: Val::Px(320.0), height: Val::Px(14.0), margin: UiRect::bottom(Val::Px(6.0)), ..default() },
+        BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.55)),
+        children![(Node { width: Val::Percent(100.0), height: Val::Percent(100.0), ..default() }, BackgroundColor(color), marker)],
+    )
+}
+
+fn spawn_hud(mut commands: Commands) {
+    commands.spawn((
+        Node { position_type: PositionType::Absolute, left: Val::Px(16.0), top: Val::Px(16.0), flex_direction: FlexDirection::Column, ..default() },
+        children![
+            bar(Color::srgb(0.75, 0.12, 0.1), LifeFill),
+            bar(Color::srgb(0.35, 0.7, 1.0), XpFill),
+            (Text::new(""), TextFont { font_size: FontSize::Px(20.0), ..default() }, TextColor(Color::WHITE), StatusText),
+        ],
+    ));
+}
+
+fn update_hud(
+    run: Res<Run>,
+    hero: Query<&Health, With<Hero>>,
+    enemies: Query<(), With<Enemy>>,
+    mut life: Query<&mut Node, (With<LifeFill>, Without<XpFill>)>,
+    mut xp: Query<&mut Node, (With<XpFill>, Without<LifeFill>)>,
+    mut text: Query<&mut Text, With<StatusText>>,
+) {
+    if let (Ok(hp), Ok(mut node)) = (hero.single(), life.single_mut()) {
+        node.width = Val::Percent((hp.hp / hp.max).clamp(0.0, 1.0) * 100.0);
+    }
+    if let Ok(mut node) = xp.single_mut() {
+        node.width = Val::Percent(run.xp as f32 / run.xp_next.max(1) as f32 * 100.0);
+    }
+    if let Ok(mut text) = text.single_mut() {
+        let t = run.time as u32;
+        text.0 = format!(
+            "Stufe {}   {:02}:{:02} / 10:00   Besiegt: {}   Gegner: {}",
+            run.level,
+            t / 60,
+            t % 60,
+            run.kills,
+            enemies.iter().count()
+        );
+    }
+}
+
+fn panel(marker: impl Component) -> impl Bundle {
+    (
+        Node {
+            position_type: PositionType::Absolute,
+            width: Val::Percent(100.0),
+            height: Val::Percent(100.0),
+            flex_direction: FlexDirection::Column,
+            align_items: AlignItems::Center,
+            justify_content: JustifyContent::Center,
+            row_gap: Val::Px(12.0),
+            ..default()
+        },
+        BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.5)),
+        marker,
+    )
+}
+
+fn show_level_up(mut commands: Commands, offer: Res<Offer>, stats: Res<HeroStats>, run: Res<Run>) {
+    commands.spawn(panel(LevelUpPanel)).with_children(|p| {
+        p.spawn((Text::new(format!("Stufe {} erreicht – wähle (1–3)", run.level)), TextFont { font_size: FontSize::Px(32.0), ..default() }));
+        for (i, upgrade) in offer.0.iter().enumerate() {
+            p.spawn((
+                Node { width: Val::Px(560.0), padding: UiRect::all(Val::Px(14.0)), ..default() },
+                BackgroundColor(Color::srgb(0.22, 0.18, 0.12)),
+                BorderColor::all(Color::srgb(0.8, 0.65, 0.3)),
+                children![(Text::new(format!("{}  {}", i + 1, upgrade.title(&stats))), TextFont { font_size: FontSize::Px(22.0), ..default() })],
+            ))
+            .observe(move |_: On<PointerClick>, mut clicked: ResMut<ClickedChoice>| clicked.0 = Some(i));
+        }
+    });
+}
+
+fn choose_upgrade(
+    keys: Res<ButtonInput<KeyCode>>,
+    mut clicked: ResMut<ClickedChoice>,
+    offer: Res<Offer>,
+    mut stats: ResMut<HeroStats>,
+    mut hero: Query<&mut Health, With<Hero>>,
+    mut next: ResMut<NextState<GameState>>,
+) {
+    let keys_pick = [KeyCode::Digit1, KeyCode::Digit2, KeyCode::Digit3].iter().position(|k| keys.just_pressed(*k));
+    let click_pick = clicked.0.take();
+    let Some(choice) = keys_pick.or(click_pick).and_then(|i| offer.0.get(i)) else { return };
+    if let Ok(mut hp) = hero.single_mut() {
+        choice.apply(&mut stats, &mut hp);
+    }
+    next.set(GameState::Playing);
+}
+
+fn show_end(mut commands: Commands, run: Res<Run>) {
+    let title = if run.won { "Überlebt! Die Titanen sind beeindruckt." } else { "Gefallen." };
+    commands.spawn(panel(EndPanel)).with_children(|p| {
+        p.spawn((Text::new(title), TextFont { font_size: FontSize::Px(40.0), ..default() }));
+        p.spawn((
+            Text::new(format!("Stufe {}   Besiegt: {}   Zeit {:02}:{:02}\n\nR – Neustart", run.level, run.kills, run.time as u32 / 60, run.time as u32 % 60)),
+            TextFont { font_size: FontSize::Px(24.0), ..default() },
+        ));
+    });
+}
+
+fn despawn<T: Component>(mut commands: Commands, q: Query<Entity, With<T>>) {
+    for e in &q {
+        commands.entity(e).despawn();
+    }
+}

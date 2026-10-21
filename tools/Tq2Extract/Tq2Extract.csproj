@@ -12,4 +12,14 @@
     <PackageReference Include="CUE4Parse-Conversion" Version="1.2.2.202610" />
   </ItemGroup>
 
+  <!-- ACL animation decompression: CUE4Parse loads CUE4Parse-Natives.dll from its own (output) directory.
+       Built locally from CUE4Parse tag 1.2.2.202610; see cache/natives. -->
+  <ItemGroup Condition="Exists('..\..\cache\natives\CUE4Parse-Natives.dll')">
+    <None Include="..\..\cache\natives\CUE4Parse-Natives.dll" Link="CUE4Parse-Natives.dll" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="material_overrides.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

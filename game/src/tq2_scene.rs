@@ -17,9 +17,15 @@ struct Instance {
     s: [f32; 3],
 }
 
+pub struct SceneInfo {
+    /// Median placement origin (robust against far-away outliers).
+    pub center: Vec3,
+    /// Height of the map's water surface mesh, if any.
+    pub water: Option<f32>,
+}
+
 /// Loads `<export_root>/<dir>/scene.json` and spawns every placement.
-/// Returns the median placement origin (robust against far-away outliers).
-pub fn spawn_scene(commands: &mut Commands, assets: &AssetServer, export_root: &str, dir: &str) -> Option<Vec3> {
+pub fn spawn_scene(commands: &mut Commands, assets: &AssetServer, export_root: &str, dir: &str) -> Option<SceneInfo> {
     let path = format!("{export_root}/{dir}/scene.json");
     let file: SceneFile = match std::fs::read_to_string(&path).map(|s| serde_json::from_str(&s)) {
         Ok(Ok(f)) => f,
@@ -48,5 +54,6 @@ pub fn spawn_scene(commands: &mut Commands, assets: &AssetServer, export_root: &
         v.sort_by(f32::total_cmp);
         v.get(v.len() / 2).copied().unwrap_or(0.0)
     };
-    Some(Vec3::new(median(0), median(1), median(2)))
+    let water = file.instances.iter().find(|i| i.mesh.contains("watersurface")).map(|i| i.t[1]);
+    Some(SceneInfo { center: Vec3::new(median(0), median(1), median(2)), water })
 }

@@ -3,7 +3,10 @@
 //
 //   list                         write cache/filelist.txt
 //   dump <package>...            print exports as JSON
-//   export <name> <path|dir>...  export meshes/skeletons/anims/textures to cache/export/<name>
+//   export <name> <path|dir>...  export meshes/textures to cache/export/<name>
+//   animate <name> <skeleton> <anims>...  bake animations into every skeletal mesh of an export
+//   materials <name>             write materials.json + textures for an export
+//   scene <name> <map.umap>      export a map (meshes, placements, materials, ground)
 //   reflect <TypeName|Ns.>...    print CUE4Parse-Conversion API (development aid)
 //   ctor <FullTypeName>          print constructor parameters (development aid)
 using System.Reflection;
@@ -66,7 +69,7 @@ switch (command)
     case "export":
     {
         var outDir = Path.Combine(cache, "export", args[1]);
-        var options = new ExportOptions(EMeshFormat.Gltf2);
+        var options = new ExportOptions(EMeshFormat.Gltf2, exportMorphTargets: false);
         var session = new ExportSession(null!);
         foreach (var arg in args.Skip(2))
         {
@@ -117,66 +120,23 @@ switch (command)
         break;
     }
 
-    case "animate":
+    case "materials":
     {
-        // animate <mesh.glb relative to cache/export> <out.glb> <skeleton pkg> <anim pkg or dir>...
-        var model = SharpGLTF.Schema2.ModelRoot.Load(Path.Combine(cache, "export", args[1]));
-        var nodes = model.LogicalNodes.GroupBy(n => n.Name ?? "").ToDictionary(g => g.Key, g => g.First());
-        var skeleton = provider.LoadPackage(args[3]).GetExports().OfType<USkeleton>().First();
-        var boneNames = skeleton.ReferenceSkeleton.FinalRefBoneInfo.Select(b => b.Name.Text).ToArray();
-        Console.WriteLine($"skeleton {skeleton.Name}: {boneNames.Length} bones, {boneNames.Count(nodes.ContainsKey)} matched in mesh");
-
-        var animPaths = args.Skip(4).SelectMany(arg => provider.Files.Keys.Where(k => k.EndsWith(".uasset") &&
-            (k.Equals(arg, StringComparison.OrdinalIgnoreCase) || k.StartsWith(arg.TrimEnd('/') + "/", StringComparison.OrdinalIgnoreCase))));
-        foreach (var path in animPaths)
-        {
-            UAnimSequence? seq;
-            try { seq = provider.LoadPackage(path).GetExports().OfType<UAnimSequence>().FirstOrDefault(); }
-            catch (Exception ex) { Console.WriteLine($"  FAILED {path}: {ex.Message}"); continue; }
-            if (seq == null) continue;
-            try
-            {
-                var anim = skeleton.ConvertAnims(seq).Sequences[0];
-                if (anim.IsAdditive) { Console.WriteLine($"  skip additive {anim.Name}"); continue; }
-                var gltfAnim = model.CreateAnimation(seq.Name);
-                int channels = 0;
-                for (int bone = 0; bone < anim.Tracks.Count && bone < boneNames.Length; bone++)
-                {
-                    var track = anim.Tracks[bone];
-                    if (!track.HasKeys() || !nodes.TryGetValue(boneNames[bone], out var node)) continue;
-                    var rot = new Dictionary<float, System.Numerics.Quaternion>();
-                    var pos = new Dictionary<float, System.Numerics.Vector3>();
-                    var scl = new Dictionary<float, System.Numerics.Vector3>();
-                    for (int frame = 0; frame < Math.Max(1, anim.NumFrames); frame++)
-                    {
-                        FQuat q = FQuat.Identity; FVector p = FVector.ZeroVector, s = FVector.OneVector;
-                        track.GetBoneTransform(frame, anim.NumFrames, ref q, ref p, ref s);
-                        float t = frame / anim.FramesPerSecond;
-                        // Same UE (Z-up, LH, cm) -> glTF (Y-up, RH, m) mapping as CUE4Parse's Gltf writer.
-                        rot[t] = System.Numerics.Quaternion.Normalize(new(q.X, q.Z, q.Y, -q.W));
-                        pos[t] = new(p.X * 0.01f, p.Z * 0.01f, p.Y * 0.01f);
-                        scl[t] = new(s.X, s.Z, s.Y);
-                    }
-                    gltfAnim.CreateRotationChannel(node, rot);
-                    gltfAnim.CreateTranslationChannel(node, pos);
-                    gltfAnim.CreateScaleChannel(node, scl);
-                    channels++;
-                }
-                Console.WriteLine($"  {seq.Name}: {anim.NumFrames} frames @ {anim.FramesPerSecond} fps, {channels} bones");
-            }
-            catch (Exception ex) { Console.WriteLine($"  FAILED {seq.Name}: {ex.GetType().Name}: {ex.Message}"); }
-        }
-        var outGlb = Path.Combine(cache, "export", args[2]);
-        model.SaveGLB(outGlb);
-        var library = new MaterialLibrary(provider, Path.GetDirectoryName(outGlb)!);
-        library.AddFromMeshes([outGlb]);
+        // materials <export name>: write materials.json for every mesh of an export
+        var dir = Path.Combine(cache, "export", args[1]);
+        var library = new MaterialLibrary(provider, dir);
+        library.AddFromMeshes(Directory.EnumerateFiles(dir, "*.glb", SearchOption.AllDirectories));
         library.Save();
-        Console.WriteLine($"wrote {outGlb} with {model.LogicalAnimations.Count} animations");
         break;
     }
 
+    case "animate":
+        // animate <export name> <skeleton pkg> <anim pkg or dir>...
+        Animate.Run(provider, cache, args[1], args[2], args.Skip(3));
+        break;
+
     default:
-        Console.WriteLine("commands: list | dump <pkg>... | export <name> <path>... | animate <mesh.glb> <out.glb> <skeleton> <anims>... | reflect <type>... | ctor <type>");
+        Console.WriteLine("commands: list | dump <pkg>... | export <name> <path>... | animate <name> <skeleton> <anims>... | reflect <type>... | ctor <type>");
         return 1;
 }
 return 0;

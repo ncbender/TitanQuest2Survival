@@ -31,7 +31,7 @@ static class SceneExport
         var session = new ExportSession(null!);
         foreach (var m in meshes.Values) session.Add(m);
         // Materials are resolved separately (MaterialLibrary), so skip CUE4Parse's per-mesh texture export.
-        var results = await session.RunAsync(rawDir, new ExportOptions(EMeshFormat.Gltf2, exportMaterials: false), null!, CancellationToken.None);
+        var results = await session.RunAsync(rawDir, new ExportOptions(EMeshFormat.Gltf2, exportMaterials: false, exportMorphTargets: false), null!, CancellationToken.None);
         Console.WriteLine($"exported {results.Count(r => r.Success)}/{results.Count} objects ({results.Count(r => !r.Success)} failed)");
         foreach (var r in results.Where(r => !r.Success).Take(5)) Console.WriteLine($"  FAIL {r.ObjectPath}: {r.Error?.Message}");
 
@@ -68,6 +68,61 @@ static class SceneExport
         }
         File.WriteAllText(Path.Combine(outDir, "scene.json"), JsonConvert.SerializeObject(new { map = mapPath, instances }));
         Console.WriteLine($"wrote {outDir}/scene.json: {instances.Count} instances, {meshFiles.Count} meshes");
+
+        var landscapes = placements.Where(p => meshes[p.Mesh] is not UStaticMesh && meshFiles.ContainsKey(p.Mesh))
+            .Select(p => (Path.Combine(outDir, meshFiles[p.Mesh]), ToBevy(p.Ue))).ToList();
+        if (landscapes.Count > 0) WriteGround(Path.Combine(outDir, "ground.json"), landscapes);
+    }
+
+    // UE-space matrix -> the same transform in Bevy space (what the game applies to the glb).
+    static Matrix4x4 ToBevy(Matrix4x4 ue)
+    {
+        Matrix4x4.Decompose(ue, out var s, out var q, out var t);
+        return Matrix4x4.CreateScale(s.X, s.Z, s.Y)
+             * Matrix4x4.CreateFromQuaternion(new Quaternion(q.X, q.Z, q.Y, -q.W))
+             * Matrix4x4.CreateTranslation(t.X * 0.01f, t.Z * 0.01f, t.Y * 0.01f);
+    }
+
+    // Height grid (1 m cells) rasterised from the landscape vertices, so gameplay can
+    // place units on the terrain without physics: ground.json { origin, cell, w, h, heights }.
+    static void WriteGround(string path, List<(string glb, Matrix4x4 transform)> landscapes)
+    {
+        const float Cell = 1f;
+        var points = new List<Vector3>();
+        foreach (var (glb, m) in landscapes)
+            foreach (var mesh in ModelRoot.Load(glb).LogicalMeshes)
+                foreach (var prim in mesh.Primitives)
+                    points.AddRange(prim.GetVertexAccessor("POSITION").AsVector3Array().Select(v => Vector3.Transform(v, m)));
+        float minX = points.Min(p => p.X), minZ = points.Min(p => p.Z);
+        int w = (int)Math.Ceiling((points.Max(p => p.X) - minX) / Cell) + 1;
+        int h = (int)Math.Ceiling((points.Max(p => p.Z) - minZ) / Cell) + 1;
+        var heights = new float?[w * h];
+        foreach (var p in points)
+        {
+            int x = (int)Math.Round((p.X - minX) / Cell), z = (int)Math.Round((p.Z - minZ) / Cell);
+            var i = z * w + x;
+            heights[i] = heights[i] is { } old ? Math.Max(old, p.Y) : p.Y;
+        }
+        // Fill cells no vertex landed in from their neighbours.
+        for (int pass = 0; pass < 8 && heights.Any(v => v == null); pass++)
+            for (int z = 0; z < h; z++)
+                for (int x = 0; x < w; x++)
+                {
+                    if (heights[z * w + x] != null) continue;
+                    var n = new[] { (x - 1, z), (x + 1, z), (x, z - 1), (x, z + 1) }
+                        .Where(c => c.Item1 >= 0 && c.Item1 < w && c.Item2 >= 0 && c.Item2 < h)
+                        .Select(c => heights[c.Item2 * w + c.Item1]).Where(v => v != null).ToList();
+                    if (n.Count > 0) heights[z * w + x] = n.Average();
+                }
+        File.WriteAllText(path, JsonConvert.SerializeObject(new
+        {
+            origin = new[] { minX, minZ },
+            cell = Cell,
+            w,
+            h,
+            heights = heights.Select(v => MathF.Round(v ?? 0, 2)),
+        }));
+        Console.WriteLine($"wrote {path}: {w}x{h} cells from {points.Count} landscape vertices");
     }
 
     static void CollectLevel(DefaultFileProvider provider, string mapPath, Matrix4x4 parent,
