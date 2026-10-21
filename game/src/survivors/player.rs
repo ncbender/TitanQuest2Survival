@@ -2,9 +2,9 @@
 use bevy::prelude::*;
 
 use super::camera::CameraRig;
-use super::content::{HERO_IDLE, HERO_PARTS, HERO_RUN, HERO_WEAPON, HERO_WEAPON_BONE};
+use super::equipment::Equipment;
 use super::{config, GameState, Health, Pos, Radius, RunEntity, Vel};
-use crate::character::{attach_parts, Attachment, CharacterAnim};
+use crate::character::CharacterAnim;
 use crate::ground::Ground;
 use crate::obstacles::Obstacles;
 
@@ -48,14 +48,13 @@ pub fn spawn_hero(commands: &mut Commands, at: Vec2) -> Entity {
             Vel::default(),
             Radius(HERO_RADIUS),
             Health { hp: config::PLAYER_HP, max: config::PLAYER_HP },
-            CharacterAnim::looping(HERO_IDLE),
-            // The staff's head points along its +Y; on HandAttach_R that axis faces down.
-            Attachment { bone: HERO_WEAPON_BONE, scene: HERO_WEAPON, rotation: Quat::from_rotation_x(std::f32::consts::PI) },
+            // Parts, carried weapon and stance follow the equipment (see equipment.rs).
+            CharacterAnim::looping(Equipment::default().weapon.idle),
+            Equipment::default(),
             Transform::default(),
             Visibility::default(),
         ))
         .id();
-    attach_parts(commands, hero, HERO_PARTS);
     hero
 }
 
@@ -85,9 +84,9 @@ fn move_hero(
     pos.0 = obstacles.resolve(next, HERO_RADIUS, ground.stand(next));
 }
 
-fn animate_hero(mut hero: Query<(&Vel, &mut CharacterAnim), With<Hero>>) {
-    for (vel, mut anim) in &mut hero {
-        let clip = if vel.0.length_squared() > 0.1 { HERO_RUN } else { HERO_IDLE };
+fn animate_hero(mut hero: Query<(&Vel, &Equipment, &mut CharacterAnim), With<Hero>>) {
+    for (vel, eq, mut anim) in &mut hero {
+        let clip = if vel.0.length_squared() > 0.1 { eq.weapon.run } else { eq.weapon.idle };
         if anim.clip != clip {
             *anim = CharacterAnim::looping(clip);
         }

@@ -3,6 +3,7 @@ use bevy::prelude::*;
 use std::collections::HashMap;
 
 use super::bestiary::{self, EnemyDef};
+use super::equipment::Equipment;
 use super::flowfield::FlowField;
 use super::player::Hero;
 use super::{config, GameState, Health, Pos, Radius, Run, RunEntity, Vel};
@@ -20,6 +21,7 @@ pub struct Enemy {
     pub attack_timer: f32,
     /// Seconds left in the spawn animation; the enemy does not move meanwhile.
     pub spawning: f32,
+    pub elite: bool,
     pub boss: bool,
 }
 
@@ -163,6 +165,7 @@ pub fn spawn_enemy(commands: &mut Commands, def: &'static EnemyDef, at: Vec2, sc
                 xp: def.xp * xp_mult,
                 attack_timer: 0.0,
                 spawning,
+                elite,
                 boss,
             },
             RunEntity,
@@ -185,10 +188,10 @@ fn chase_and_attack(
     ground: Res<Ground>,
     obstacles: Res<Obstacles>,
     field: Res<FlowField>,
-    mut hero: Query<(&Pos, &mut Health), (With<Hero>, Without<Enemy>)>,
+    mut hero: Query<(&Pos, &mut Health, &Equipment), (With<Hero>, Without<Enemy>)>,
     mut enemies: Query<(Entity, &mut Pos, &mut Vel, &Radius, &mut Enemy, &mut CharacterAnim), Without<Hero>>,
 ) {
-    let Ok((hero_pos, mut hero_hp)) = hero.single_mut() else { return };
+    let Ok((hero_pos, mut hero_hp, gear)) = hero.single_mut() else { return };
     let dt = time.delta_secs();
     for (e, mut pos, mut vel, radius, mut enemy, mut anim) in &mut enemies {
         let def = enemy.def;
@@ -219,7 +222,7 @@ fn chase_and_attack(
             vel.0 = to_hero.normalize_or_zero() * 0.01; // keep facing the hero
             if enemy.attack_timer <= 0.0 {
                 enemy.attack_timer = config::ATTACK_COOLDOWN;
-                hero_hp.hp -= enemy.damage;
+                hero_hp.hp -= enemy.damage * (1.0 - gear.armor.armor);
                 *anim = CharacterAnim::once(def.attack);
             }
         } else {

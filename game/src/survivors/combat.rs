@@ -1,7 +1,8 @@
 //! Hero attacks (auto-aimed bolts, Nova), damage, deaths and XP drops.
 use bevy::prelude::*;
 
-use super::content::{BOLT, NOVA_RING, NOVA_RING_RADIUS, SHARD};
+use super::content::{ARROW, BOLT, NOVA_RING, NOVA_RING_RADIUS, SHARD};
+use super::equipment::{drop_chest, AttackKind, Equipment};
 use super::enemies::{Enemy, EnemyGrid};
 use super::player::{Hero, HeroStats};
 use super::progression::XpShard;
@@ -16,6 +17,7 @@ pub struct Projectile {
     vel: Vec2,
     damage: f32,
     crit: bool,
+    hit_sound: &'static str,
     pierce: u32,
     life: f32,
     hit: Vec<Entity>,
@@ -46,16 +48,16 @@ struct NovaFlash(f32);
 
 #[derive(Resource, Default)]
 struct Weapons {
-    bolt_timer: f32,
+    /// Cooldown of the equipped weapon's auto-attack.
+    attack_timer: f32,
     nova_timer: f32,
 }
 
-const BOLT_COOLDOWN: f32 = 0.9;
-const BOLT_DAMAGE: f32 = 10.0;
-const BOLT_SPEED: f32 = 22.0;
-const BOLT_RANGE: f32 = 18.0;
-/// Angle between neighbouring bolts of a multishot (radians, ~11°).
+/// Angle between neighbouring projectiles of a multishot (radians, ~11°).
 const BOLT_SPREAD: f32 = 0.2;
+/// Sword sweep arc (radians) and the extra width per additional projectile upgrade.
+const SWEEP_ARC: f32 = 2.4;
+const SWEEP_ARC_PER_EXTRA: f32 = 0.35;
 const NOVA_COOLDOWN: f32 = 3.5;
 const NOVA_DAMAGE: f32 = 12.0;
 const NOVA_RADIUS: f32 = 4.0;
@@ -65,7 +67,7 @@ pub fn plugin(app: &mut App) {
         .add_message::<Hit>()
         .add_systems(
             FixedUpdate,
-            (fire_bolts, fire_nova, move_projectiles, kill_dead, check_game_over)
+            (auto_attack, fire_nova, move_projectiles, kill_dead, check_game_over)
                 .chain()
                 .after(super::enemies::EnemySet)
                 .run_if(in_state(GameState::Playing)),
@@ -84,40 +86,84 @@ fn roll_damage(base: f32, stats: &HeroStats) -> (f32, bool) {
     (base * stats.damage * if crit { 2.0 } else { 1.0 }, crit)
 }
 
-fn fire_bolts(
+/// The equipped weapon's auto-attack: projectiles (staff, bow) or a melee sweep (sword).
+fn auto_attack(
     mut commands: Commands,
     time: Res<Time>,
     assets: Res<AssetServer>,
+    audio: Res<Audio>,
+    ground: Res<Ground>,
     stats: Res<HeroStats>,
     mut weapons: ResMut<Weapons>,
     grid: Res<EnemyGrid>,
-    hero: Query<&Pos, With<Hero>>,
+    hero: Query<(&Pos, &Equipment), With<Hero>>,
+    mut enemies: Query<&mut Health, With<Enemy>>,
+    mut hits: MessageWriter<Hit>,
 ) {
-    let Ok(hero) = hero.single() else { return };
-    weapons.bolt_timer -= time.delta_secs();
-    if weapons.bolt_timer > 0.0 {
+    let Ok((hero, eq)) = hero.single() else { return };
+    let w = eq.weapon;
+    weapons.attack_timer -= time.delta_secs();
+    if weapons.attack_timer > 0.0 {
         return;
     }
-    // Aim at the nearest enemy; extra projectiles fan out evenly around that direction.
-    let Some(target) = grid.near(hero.0, BOLT_RANGE).map(|(_, p, _)| p).min_by(|a, b| {
+    // Aim at the nearest enemy in range.
+    let Some(target) = grid.near(hero.0, w.range).map(|(_, p, _)| p).min_by(|a, b| {
         a.distance_squared(hero.0).total_cmp(&b.distance_squared(hero.0))
     }) else {
         return;
     };
-    weapons.bolt_timer = BOLT_COOLDOWN * stats.cooldown;
+    weapons.attack_timer = w.cooldown * stats.cooldown;
     let aim = (target - hero.0).normalize_or(Vec2::X);
-    let scene = assets.load(GltfAssetLabel::Scene(0).from_asset(BOLT));
-    let n = stats.projectiles as f32;
-    for i in 0..stats.projectiles {
-        let dir = Vec2::from_angle((i as f32 - (n - 1.0) / 2.0) * BOLT_SPREAD).rotate(aim);
-        let (damage, crit) = roll_damage(BOLT_DAMAGE, &stats);
-        commands.spawn((
-            Projectile { vel: dir * BOLT_SPEED, damage, crit, pierce: stats.pierce, life: 1.2, hit: vec![] },
-            RunEntity,
-            Pos(hero.0 + dir * 0.6),
-            WorldAssetRoot(scene.clone()),
-            Transform::from_scale(Vec3::splat(2.5)),
-        ));
+    let at = Vec3::new(hero.0.x, ground.stand(hero.0) + 1.2, hero.0.y);
+    audio.play(w.fire_sound, Some(at), 0.5, 0.1);
+
+    match w.kind {
+        AttackKind::Bolt | AttackKind::Arrow => {
+            // Extra projectiles fan out evenly around the aim direction.
+            let (mesh, scale) = if w.kind == AttackKind::Bolt { (BOLT, 2.5) } else { (ARROW, 1.6) };
+            let scene = assets.load(GltfAssetLabel::Scene(0).from_asset(mesh));
+            let n = stats.projectiles as f32;
+            for i in 0..stats.projectiles {
+                let dir = Vec2::from_angle((i as f32 - (n - 1.0) / 2.0) * BOLT_SPREAD).rotate(aim);
+                let (damage, crit) = roll_damage(w.damage, &stats);
+                commands.spawn((
+                    Projectile {
+                        vel: dir * w.speed_or_radius,
+                        damage,
+                        crit,
+                        hit_sound: w.hit_sound,
+                        pierce: w.pierce + stats.pierce,
+                        life: w.range / w.speed_or_radius,
+                        hit: vec![],
+                    },
+                    RunEntity,
+                    Pos(hero.0 + dir * 0.6),
+                    WorldAssetRoot(scene.clone()),
+                    Transform::from_scale(Vec3::splat(scale)),
+                ));
+            }
+        }
+        AttackKind::Sweep => {
+            // Everything in an arc in front of the hero; each multishot upgrade widens the arc.
+            let radius = w.speed_or_radius * stats.area;
+            let half_arc = (SWEEP_ARC + SWEEP_ARC_PER_EXTRA * (stats.projectiles - 1) as f32).min(std::f32::consts::TAU) / 2.0;
+            let mut struck = 0;
+            for (e, p, _) in grid.near(hero.0, radius) {
+                let to = p - hero.0;
+                if to.length_squared() > 0.25 && aim.angle_to(to).abs() > half_arc {
+                    continue;
+                }
+                if let Ok(mut hp) = enemies.get_mut(e) {
+                    let (amount, crit) = roll_damage(w.damage, &stats);
+                    hp.hp -= amount;
+                    hits.write(Hit { at: p, amount, crit });
+                    struck += 1;
+                }
+            }
+            if struck > 0 {
+                audio.play(w.hit_sound, Some(at), 0.6, 0.05);
+            }
+        }
     }
 }
 
@@ -195,7 +241,7 @@ fn move_projectiles(
                 if let Ok(mut hp) = enemies.get_mut(target) {
                     hp.hp -= p.damage;
                     hit_events.write(Hit { at: pos.0, amount: p.damage, crit: p.crit });
-                    audio.play(sound::BOLT_HIT, Some(Vec3::new(pos.0.x, ground.stand(pos.0) + 1.0, pos.0.y)), 0.5, 0.07);
+                    audio.play(p.hit_sound, Some(Vec3::new(pos.0.x, ground.stand(pos.0) + 1.0, pos.0.y)), 0.5, 0.07);
                     p.hit.push(target);
                     if p.hit.len() as u32 > p.pierce {
                         done = true;
@@ -226,6 +272,10 @@ fn kill_dead(
         audio.play(sound::KILL, Some(Vec3::new(pos.0.x, ground.stand(pos.0) + 1.0, pos.0.y)), 0.6, 0.08);
         // Leave the simulation now; the body sinks away in `fade_dying`.
         commands.entity(e).remove::<(Enemy, Health, Pos)>().insert(Dying(0.0));
+        // Elites and bosses leave a chest with gear to choose from.
+        if enemy.elite || enemy.boss {
+            drop_chest(&mut commands, &assets, pos.0);
+        }
         let shards = if enemy.boss { 10 } else { 1 };
         for i in 0..shards {
             let offset = if shards > 1 { Vec2::from_angle(i as f32) * 1.5 } else { Vec2::ZERO };

@@ -6,6 +6,7 @@ mod bestiary;
 mod camera;
 mod combat;
 mod enemies;
+mod equipment;
 mod flowfield;
 mod hud;
 mod menu;
@@ -19,20 +20,10 @@ use crate::ground::Ground;
 
 /// Original TQ2 assets used by the game (paths below cache/export).
 pub mod content {
-    pub const HERO_PARTS: &[&str] = &[
-        "hero/sk_male_base_animated.glb",
-        "hero/sk_male_torso_greek_adventurer_01_animated.glb",
-        "hero/sk_male_leg_greek_adventurer_01_animated.glb",
-        "hero/sk_human_male_hair_01_animated.glb",
-    ];
-    pub const HERO_IDLE: &str = "a_male_staff2h_idle_combat_01";
-    pub const HERO_RUN: &str = "a_male_staff2h_run_01";
-    /// Staff of Apollo (TQ2 unique staff) in the hero's right hand.
-    pub const HERO_WEAPON: &str =
-        "weapons/TQ2/Content/TQ2/Character/Human/Weapon/Staff2H/Unique/Staff2H_Staff_Of_Apollo_01/sm_staff2h_staff_of_apollo_01.glb";
-    pub const HERO_WEAPON_BONE: &str = "HandAttach_R";
+    // Hero parts, weapons and armour sets live in equipment.rs.
 
     pub const BOLT: &str = "props/TQ2/Content/TQ2/Character/Abilities/Forge_Sentry_01/sm_forge_sentry_projectile_01.glb";
+    pub const ARROW: &str = "props/TQ2/Content/TQ2/Character/Human/Weapon/Bow2H/Projectile/sm_projectile_greek_narrow_01.glb";
     pub const SHARD: &str = "props/TQ2/Content/TQ2/Character/Crafting/In_World/Mystical_Shards/sm_mystic_shards.glb";
     /// Forge Call ability ring (TQ2) used as the Nova shockwave; outer radius in metres.
     pub const NOVA_RING: &str = "props/TQ2/Content/TQ2/Character/Abilities/Forge_Call_01/sm_forge_call_ring_outer.glb";
@@ -43,7 +34,6 @@ pub mod content {
         pub const MENU_MUSIC: &str = "event:/music/mus_mainmenu";
         pub const RUN_MUSIC: &str = "event:/music/mus_combat_generic_01";
         pub const BOSS_MUSIC: &str = "event:/music/mus_centaur_chapter_bossfight_centaurus";
-        pub const BOLT_HIT: &str = "event:/weapons/hit/sfx_weapon_hit_staff_projectile_fire";
         pub const NOVA: &str = "event:/abilities/player/masteries/spirit/death_nova/sfx_ability_player_death_nova_commit";
         pub const KILL: &str = "event:/weapons/hit/sfx_weapon_hit_generic_medium";
         pub const SHARD: &str = "event:/loot/pickup/misc/sfx_loot_pickup_gold";
@@ -83,6 +73,8 @@ pub enum GameState {
     Playing,
     LevelUp,
     Paused,
+    /// Choosing gear from an opened chest.
+    Loot,
     GameOver,
 }
 
@@ -135,7 +127,7 @@ impl Plugin for SurvivorsPlugin {
             .init_resource::<Run>()
             .add_message::<StartRun>()
             .add_plugins((camera::plugin, player::plugin, enemies::plugin, combat::plugin, progression::plugin, hud::plugin))
-            .add_plugins((menu::plugin, bench::plugin, flowfield::plugin))
+            .add_plugins((menu::plugin, bench::plugin, flowfield::plugin, equipment::plugin))
             .add_systems(Startup, skip_menu_in_tests)
             .add_systems(OnEnter(GameState::MainMenu), clear_run)
             .add_systems(Update, ((start_run, follow_ground, restart).chain(), music));
@@ -154,6 +146,7 @@ fn skip_menu_in_tests(mut start: MessageWriter<StartRun>) {
 /// Resets every piece of run state and spawns the hero.
 fn start_run(
     mut commands: Commands,
+    assets: Res<AssetServer>,
     mut requests: MessageReader<StartRun>,
     mut next: ResMut<NextState<GameState>>,
     mut run: ResMut<Run>,
@@ -172,6 +165,25 @@ fn start_run(
     enemies::reset(&mut commands);
     combat::reset(&mut commands);
     let hero = player::spawn_hero(&mut commands, arena.start);
+    // Test hook: TQ2_TEST_CHEST=1 drops a chest right next to the hero.
+    if std::env::var_os("TQ2_TEST_CHEST").is_some() {
+        equipment::drop_chest(&mut commands, &assets, arena.start + Vec2::X);
+    }
+    // Test hook: TQ2_TEST_GEAR=bow,ranger starts with that weapon/armour.
+    if let Ok(list) = std::env::var("TQ2_TEST_GEAR") {
+        let mut gear = equipment::Equipment::default();
+        for name in list.split(',').map(str::trim) {
+            match name {
+                "staff" => gear.weapon = &equipment::STAFF,
+                "bow" => gear.weapon = &equipment::BOW,
+                "sword" => gear.weapon = &equipment::SWORD,
+                "scholar" => gear.armor = &equipment::SCHOLAR,
+                "ranger" => gear.armor = &equipment::RANGER,
+                other => warn!("unknown gear {other}"),
+            }
+        }
+        commands.entity(hero).insert(gear);
+    }
     // Test hook: TQ2_TEST_UPGRADES=multishot,multishot,nova applies upgrades at the start.
     if let Ok(list) = std::env::var("TQ2_TEST_UPGRADES") {
         let mut hp = Health { hp: config::PLAYER_HP, max: config::PLAYER_HP };

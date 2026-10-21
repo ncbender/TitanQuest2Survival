@@ -5,6 +5,7 @@ use super::player::{Hero, HeroStats};
 use super::progression::Offer;
 use super::{GameState, Health, Run};
 use super::combat::Hit;
+use super::equipment::{Equipment, Gear, LootOffer};
 use crate::fonts::TitleFont;
 use crate::ground::Ground;
 use crate::survivors::enemies::Enemy;
@@ -25,6 +26,8 @@ struct LevelUpPanel;
 struct ClickedChoice(Option<usize>);
 #[derive(Component)]
 struct EndPanel;
+#[derive(Component)]
+struct LootPanel;
 
 pub fn plugin(app: &mut App) {
     app.init_resource::<ClickedChoice>()
@@ -34,6 +37,9 @@ pub fn plugin(app: &mut App) {
         .add_systems(OnEnter(GameState::LevelUp), show_level_up.after(super::progression::make_offer))
         .add_systems(OnExit(GameState::LevelUp), despawn::<LevelUpPanel>)
         .add_systems(Update, choose_upgrade.run_if(in_state(GameState::LevelUp)))
+        .add_systems(OnEnter(GameState::Loot), show_loot)
+        .add_systems(OnExit(GameState::Loot), despawn::<LootPanel>)
+        .add_systems(Update, choose_loot.run_if(in_state(GameState::Loot)))
         .add_systems(OnEnter(GameState::GameOver), show_end)
         .add_systems(OnExit(GameState::GameOver), despawn::<EndPanel>);
 }
@@ -205,6 +211,47 @@ fn choose_upgrade(
     }
     audio.play(super::content::sound::PICK, None, 0.9, 0.0);
     info!("picked {choice:?}: projectiles={} nova={} damage={:.2}", stats.projectiles, stats.nova_level, stats.damage);
+    next.set(GameState::Playing);
+}
+
+fn show_loot(mut commands: Commands, offer: Res<LootOffer>, title: Res<TitleFont>) {
+    commands.spawn(panel(LootPanel)).with_children(|p| {
+        p.spawn((Text::new("Truhe geöffnet – wähle deine Ausrüstung"), title.at(36.0)));
+        for (i, gear) in offer.0.iter().enumerate() {
+            p.spawn((
+                Node { width: Val::Px(620.0), padding: UiRect::all(Val::Px(14.0)), ..default() },
+                BackgroundColor(Color::srgb(0.18, 0.16, 0.22)),
+                children![(Text::new(format!("{}  {}", i + 1, gear.title())), TextFont { font_size: FontSize::Px(22.0), ..default() })],
+            ))
+            .observe(move |_: On<PointerClick>, mut clicked: ResMut<ClickedChoice>| clicked.0 = Some(i));
+        }
+        p.spawn((Text::new("Esc – nichts nehmen"), TextFont { font_size: FontSize::Px(18.0), ..default() }));
+    });
+}
+
+fn choose_loot(
+    keys: Res<ButtonInput<KeyCode>>,
+    mut clicked: ResMut<ClickedChoice>,
+    offer: Res<LootOffer>,
+    audio: Res<crate::audio::Audio>,
+    mut hero: Query<&mut Equipment, With<Hero>>,
+    mut next: ResMut<NextState<GameState>>,
+) {
+    let keys_pick = [KeyCode::Digit1, KeyCode::Digit2, KeyCode::Digit3].iter().position(|k| keys.just_pressed(*k));
+    let auto_pick = (std::env::var_os("TQ2_AUTOPLAY").is_some() || std::env::var_os("TQ2_AUTOPICK").is_some()).then_some(0);
+    if keys.just_pressed(KeyCode::Escape) {
+        next.set(GameState::Playing);
+        return;
+    }
+    let Some(gear) = keys_pick.or(clicked.0.take()).or(auto_pick).and_then(|i| offer.0.get(i)) else { return };
+    if let Ok(mut eq) = hero.single_mut() {
+        match *gear {
+            Gear::Weapon(w) => eq.weapon = w,
+            Gear::Armor(a) => eq.armor = a,
+        }
+        info!("equipped {}", gear.title());
+    }
+    audio.play(super::content::sound::PICK, None, 0.9, 0.0);
     next.set(GameState::Playing);
 }
 

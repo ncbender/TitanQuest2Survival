@@ -7,6 +7,7 @@
 //! env TQ2_AUTOPLAY=1: the hero runs in circles by itself and picks upgrades (tests, benchmarks)
 //! env TQ2_AUTOPICK=1: level-ups pick the first offer (hero stays under manual/no control)
 //! env TQ2_TEST_UPGRADES=multishot,nova,…: apply upgrades at the start of a run
+//! env TQ2_TEST_GEAR=bow,ranger / TQ2_TEST_CHEST=1: start with gear / a chest next to the hero
 //! env TQ2_TEST_GALLERY=1: spawn one of every enemy type next to the hero
 //! env TQ2_BENCH=<n>: spawn n enemies, measure 10 s of frame times into cache/bench.txt, exit
 mod audio;
@@ -25,7 +26,23 @@ use bevy::render::view::screenshot::{save_to_disk, Screenshot};
 use ground::Ground;
 use survivors::{Arena, SurvivorsPlugin};
 
-const EXPORT_ROOT: &str = "../cache/export";
+/// Where `Tq2Extract` put the exported assets: `TQ2_EXPORT_ROOT`, or the first `cache/export`
+/// found walking up from the executable or the working directory (works for `cargo run`
+/// and for starting the .exe directly).
+fn export_root() -> String {
+    if let Ok(root) = std::env::var("TQ2_EXPORT_ROOT") {
+        return root;
+    }
+    let starts = [std::env::current_exe().ok(), std::env::current_dir().ok()];
+    starts
+        .into_iter()
+        .flatten()
+        .flat_map(|p| p.ancestors().map(std::path::Path::to_path_buf).collect::<Vec<_>>())
+        .map(|dir| dir.join("cache").join("export"))
+        .find(|dir| dir.is_dir())
+        .map(|dir| dir.to_string_lossy().replace('\\', "/"))
+        .unwrap_or_else(|| "../cache/export".into())
+}
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -38,36 +55,38 @@ fn main() {
     }
     let scene = args.iter().position(|a| a == "--scene").and_then(|i| args.get(i + 1)).cloned().unwrap_or_else(|| "menu2".into());
 
+    let root = export_root();
+    info!("assets from {root}");
     let mut app = App::new();
     app.add_plugins(DefaultPlugins.set(AssetPlugin {
         // Extracted assets live in the git-ignored cache/ folder.
-        file_path: EXPORT_ROOT.into(),
+        file_path: root.clone(),
         ..default()
     }))
     .add_plugins((tq2_materials::Tq2MaterialsPlugin, character::CharacterPlugin, audio::AudioPlugin))
     .add_systems(Update, auto_screenshot);
 
-    app.add_plugins(terrain::TerrainPlugin { export_root: EXPORT_ROOT.into(), scene: scene.clone() });
-    fonts::install(&mut app, EXPORT_ROOT);
-    load_world(&mut app, &scene);
+    app.add_plugins(terrain::TerrainPlugin { export_root: root.clone(), scene: scene.clone() });
+    fonts::install(&mut app, &root);
+    load_world(&mut app, &root, &scene);
     app.add_plugins(SurvivorsPlugin).run();
 }
 
 /// Spawns the map, loads its ground and picks a start point on land near its centre.
-fn load_world(app: &mut App, scene: &str) {
+fn load_world(app: &mut App, root: &str, scene: &str) {
     let world = app.world_mut();
     let assets = world.resource::<AssetServer>().clone();
     let mut library = world.resource_mut::<tq2_materials::MaterialLibrary>();
     for dir in survivors::content::MATERIAL_DIRS.iter().copied().chain([scene]) {
-        library.load_dir(EXPORT_ROOT, dir);
+        library.load_dir(root, dir);
     }
     let mut commands = world.commands();
-    let mut info = tq2_scene::spawn_scene(&mut commands, &assets, EXPORT_ROOT, scene);
+    let mut info = tq2_scene::spawn_scene(&mut commands, &assets, root, scene);
     world.flush();
 
     let water = info.as_ref().and_then(|i| i.water);
     let obstacles = info.as_mut().map(|i| std::mem::take(&mut i.obstacles)).unwrap_or_default();
-    let ground = Ground::load(&format!("{EXPORT_ROOT}/{scene}/ground.json"), water).unwrap_or_else(Ground::flat);
+    let ground = Ground::load(&format!("{root}/{scene}/ground.json"), water).unwrap_or_else(Ground::flat);
     let center = info.map(|i| Vec2::new(i.center.x, i.center.z)).unwrap_or_default();
     // Spiral outwards from the map centre until we stand on land.
     let start = (0..400)

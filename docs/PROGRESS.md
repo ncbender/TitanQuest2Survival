@@ -50,6 +50,15 @@ the extra skeletons of mane/arm-hair parts were the main cost.
 5. Satyr assembly (static-mesh parts on the humanoid rig).
 6. Main menu, settings/save, then two-player co-op.
 
+## Gear (first version, 2026-10-21)
+
+- `equipment.rs`: weapons (Staff of Apollo – fire bolts, Bow of Iris – piercing arrows,
+  Battlemage blade – melee sweep) with their own stance clips, attach bone, sounds and attack;
+  armour sets (Adventurer, Scholar, Ranger) swap the visible torso/legs/shoulders and absorb
+  damage. Elites and bosses drop a TQ2 chest; walking into it offers three pieces of gear.
+- Verified: screenshots of bow+ranger and sword+scholar; chest -> sword swap in a test run.
+- Not yet: attack animations while firing/swinging, more weapon/armour sets, item rarity/stats.
+
 ## Planned features (requested by the user)
 
 - **Visible gear:** equipment found or chosen during a run is shown on the hero (armour parts,

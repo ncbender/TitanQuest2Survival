@@ -15,7 +15,10 @@ pub struct CharacterPlugin;
 impl Plugin for CharacterPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<PartLibrary>()
-            .add_systems(Update, (instantiate_parts, merge_parts, bind_players, drive_animation, attach_to_bones).chain());
+            .add_systems(
+                Update,
+                (sync_parts, instantiate_parts, merge_parts, bind_players, drive_animation, attach_to_bones).chain(),
+            );
     }
 }
 
@@ -44,6 +47,17 @@ pub struct Attachment {
     pub bone: &'static str,
     pub scene: &'static str,
     pub rotation: Quat,
+}
+
+/// The full list of parts a character should wear (body first). Changing it swaps parts:
+/// parts no longer listed are removed, new ones are attached (e.g. a different armour set).
+#[derive(Component, Clone, PartialEq)]
+pub struct DesiredParts(pub Vec<&'static str>);
+
+/// A mesh spawned for an `Attachment`; replaced when the character gets a new attachment.
+#[derive(Component)]
+struct AttachedMesh {
+    root: Entity,
 }
 
 /// A part glb waiting for its asset before the scene is spawned; index 0 is the body.
@@ -85,6 +99,39 @@ pub fn attach_parts(commands: &mut Commands, root: Entity, parts: &[&str]) {
     for (index, path) in parts[..count].iter().enumerate() {
         let child = commands.spawn((PendingPart(path.to_string(), index), Transform::default(), Visibility::default())).id();
         commands.entity(root).add_child(child);
+    }
+}
+
+/// Brings a character's parts in line with its `DesiredParts`.
+fn sync_parts(
+    mut commands: Commands,
+    changed: Query<(Entity, &DesiredParts, Option<&Children>), Changed<DesiredParts>>,
+    parts: Query<&CharacterPart>,
+    pending: Query<&PendingPart>,
+) {
+    for (root, desired, children) in &changed {
+        let mut present = HashSet::new();
+        let mut next_index = 0;
+        for child in children.into_iter().flatten() {
+            let (path, index) = match (parts.get(*child), pending.get(*child)) {
+                (Ok(p), _) => (p.path.as_str(), p.index),
+                (_, Ok(p)) => (p.0.as_str(), p.1),
+                _ => continue,
+            };
+            next_index = next_index.max(index + 1);
+            if desired.0.contains(&path) {
+                present.insert(path.to_string());
+            } else {
+                commands.entity(*child).despawn();
+            }
+        }
+        for path in desired.0.iter().filter(|p| !present.contains(**p)) {
+            // The body keeps index 0 so merging knows which skeleton to keep.
+            let index = if *path == desired.0[0] { 0 } else { next_index.max(1) };
+            next_index = index + 1;
+            let child = commands.spawn((PendingPart(path.to_string(), index), Transform::default(), Visibility::default())).id();
+            commands.entity(root).add_child(child);
+        }
     }
 }
 
@@ -220,6 +267,7 @@ fn attach_to_bones(
     parts: Query<&CharacterPart>,
     children: Query<&Children>,
     names: Query<&Name>,
+    attached: Query<(Entity, &AttachedMesh)>,
 ) {
     for (root, attachment, root_children) in &pending {
         // Only the body keeps its bones after merging, so look there.
@@ -227,10 +275,15 @@ fn attach_to_bones(
         let Some(bone) = children.iter_descendants(body).find(|e| names.get(*e).is_ok_and(|n| n.as_str() == attachment.bone)) else {
             continue;
         };
+        // Replace whatever this character carried before.
+        for (old, _) in attached.iter().filter(|(_, a)| a.root == root) {
+            commands.entity(old).despawn();
+        }
         let mesh = commands
             .spawn((
                 WorldAssetRoot(assets.load(GltfAssetLabel::Scene(0).from_asset(attachment.scene))),
                 Transform::from_rotation(attachment.rotation),
+                AttachedMesh { root },
             ))
             .id();
         commands.entity(bone).add_child(mesh);
