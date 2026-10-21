@@ -41,7 +41,7 @@ the extra skeletons of mane/arm-hair parts were the main cost.
 
 ## Next
 
-1. Performance beyond 500: animation LOD / reduced update rate for distant enemies.
+1. ~~Performance beyond 500~~ done (see Performance LOD below).
 2. ~~More enemy types~~ Spider, Giant Boar, Skeleton (rises from the ground), Harpy, Cyclops boss
    added via `tools/assets.json` + `bestiary.rs`; still no real death animation.
 3. ~~Weapon on the hero~~, ~~attack animations~~ done; the hero still faces where it runs, not
@@ -192,6 +192,29 @@ the extra skeletons of mane/arm-hair parts were the main cost.
   distance and throw bolts that only hit the hero (armour, barrier and glancing apply).
   Verified in a gallery run (log "first ranged attack").
 - Arena strength flattened to ×1.0 / 1.3 / 1.6 / 2.0 (a start staff got 1 kill in 70 s at ×2.5).
+
+## Performance LOD, ragdoll deaths (2026-10-21)
+
+Benchmark `TQ2_BENCH=<n>` on gen:coast, release, Ryzen 7 9800X3D + RX 9070 XT, VSync 120:
+
+| enemies | before | animation graphs pruned | + off-screen hidden | + crowd detail LOD |
+|---|---|---|---|---|
+| 300 | 112 | 114 | – | – |
+| 500 | 79 | 87 | 96 | 112 |
+| 800 | 50 | 62 | 72 | 94–96 |
+
+With `TQ2_BENCH_SPREAD=40` (horde partly off screen): 500 → 106, 800 → 91 FPS.
+- Enemy animation graphs only contain the clips enemies play (`ClipAllowlist`): Bevy walks
+  every graph node for every bone each frame.
+- Enemies outside the view (with margin) stop animating and are hidden (`AnimationFrozen`).
+- Only the 200 enemies nearest to the hero show their extra parts (mane, hair, tusks)
+  (`LowDetail`); a body-only test had shown that extra parts cost about half the frame.
+- Not a factor: enemy shadows (no change with enemies out of the shadow map).
+- Deaths: instead of real ragdoll physics (a physics engine and per-bone joints for hundreds
+  of creatures) a fake ragdoll: pose freezes, the body is thrown away from the hero (less for
+  big creatures), tips onto its side, bounces with a dust puff, slides and sinks.
+- Fixed: the inventory preview could build the hero's part graphs without the rigged
+  (upper-body) nodes when the inventory was opened before the first run.
 
 ## Blockers / risks
 

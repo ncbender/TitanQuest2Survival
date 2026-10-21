@@ -30,7 +30,23 @@ pub struct Projectile {
 
 /// Enemy in its death fade (simulation already removed it).
 #[derive(Component)]
-struct Dying(f32);
+/// A dead enemy thrown like a ragdoll: its pose freezes, it flies away from the hero, tips
+/// over, bounces once or twice and sinks into the ground.
+struct Dying {
+    age: f32,
+    vel: Vec3,
+    /// Axis it tips over around (horizontal, across its flight).
+    axis: Vec3,
+    /// Tip-over angle so far and its target (lying on the side).
+    tilt: f32,
+    spin: f32,
+    landed: bool,
+}
+
+/// Seconds until a body starts sinking, and until it is gone.
+const LIE: f32 = 1.4;
+const GONE: f32 = 2.3;
+const GRAVITY: f32 = 22.0;
 
 /// A hit to show as a floating damage number.
 #[derive(Message)]
@@ -236,9 +252,11 @@ fn kill_dead(
     stats: Res<HeroStats>,
     mut mech: ResMut<super::mechanics::Mechanics>,
     mut hero: Query<&mut Health, With<Hero>>,
-    dead: Query<(Entity, &Health, &Pos, &Enemy), Without<Hero>>,
+    hero_positions: Query<&Pos, With<Hero>>,
+    dead: Query<(Entity, &Health, &Pos, &Enemy, &super::Radius), Without<Hero>>,
 ) {
-    for (e, hp, pos, enemy) in &dead {
+    let hero_pos = hero_positions.single().ok().map(|p| p.0);
+    for (e, hp, pos, enemy, radius) in &dead {
         // Execution: wounded enemies below the threshold die (not bosses).
         let threshold = if enemy.boss { 0.0 } else { hp.max * stats.execute };
         if hp.hp > threshold {
@@ -248,7 +266,22 @@ fn kill_dead(
         super::mechanics::on_kill(&mut mech, &stats, &mut hero);
         audio.play(sound::KILL, Some(Vec3::new(pos.0.x, ground.stand(pos.0) + 1.0, pos.0.y)), 0.6, 0.08);
         // Leave the simulation now; the body sinks away in `fade_dying`.
-        commands.entity(e).remove::<(Enemy, Health, Pos)>().insert(Dying(0.0));
+        // Thrown away from the hero; big creatures fly less far.
+        let away = hero_pos.map_or(Vec2::X, |h| (pos.0 - h).normalize_or(Vec2::X));
+        let heavy = (radius.0 / 0.7).max(1.0);
+        let push = (5.0 + fastrand::f32() * 3.0) / heavy;
+        let dir3 = Vec3::new(away.x, 0.0, away.y);
+        commands.entity(e).remove::<(Enemy, Health, Pos)>().insert((
+            Dying {
+                age: 0.0,
+                vel: dir3 * push + Vec3::Y * (4.0 + fastrand::f32() * 2.5) / heavy.sqrt(),
+                axis: Vec3::Y.cross(dir3).normalize_or(Vec3::X),
+                tilt: 0.0,
+                spin: (fastrand::f32() - 0.5) * 3.0,
+                landed: false,
+            },
+            crate::character::AnimationFrozen,
+        ));
         // Bosses drop Ichor for mastery tiers (the second boss of a run two).
         if enemy.boss {
             run.bosses += 1;
@@ -300,13 +333,41 @@ fn place_projectiles(ground: Res<Ground>, mut q: Query<(&Pos, &Projectile, &mut 
     }
 }
 
-fn fade_dying(mut commands: Commands, time: Res<Time>, mut q: Query<(Entity, &mut Dying, &mut Transform)>) {
+fn fade_dying(mut commands: Commands, time: Res<Time>, ground: Res<Ground>, fx: Res<crate::fx::Fx>, mut q: Query<(Entity, &mut Dying, &mut Transform)>) {
+    let dt = time.delta_secs();
     for (e, mut d, mut t) in &mut q {
-        d.0 += time.delta_secs();
-        t.translation.y -= 1.5 * time.delta_secs();
-        t.rotation *= Quat::from_rotation_x(-1.5 * time.delta_secs()).slerp(Quat::IDENTITY, (d.0 / 0.5).min(1.0));
-        if d.0 > 1.2 {
+        d.age += dt;
+        if d.age > GONE {
             commands.entity(e).despawn();
+            continue;
+        }
+        let floor = ground.stand(Vec2::new(t.translation.x, t.translation.z));
+        if d.age < LIE {
+            // Flight with gravity; on the ground it bounces once, then slides to a stop.
+            d.vel.y -= GRAVITY * dt;
+            t.translation += d.vel * dt;
+            if t.translation.y <= floor {
+                t.translation.y = floor;
+                if d.vel.y < -3.0 {
+                    if !d.landed {
+                        commands.spawn(fx.flash(crate::fx::Tex::Puff, crate::fx::Element::Physical, t.translation + Vec3::Y * 0.3, 1.6, 0.45));
+                    }
+                    d.vel.y *= -0.3;
+                    d.landed = true;
+                } else {
+                    d.vel.y = 0.0;
+                }
+                d.vel.x *= (1.0 - 6.0 * dt).max(0.0);
+                d.vel.z *= (1.0 - 6.0 * dt).max(0.0);
+            }
+            // Tip over onto the side (about 80°) while flying, with a little spin.
+            let step = (1.4 - d.tilt).min(5.0 * dt).max(0.0);
+            d.tilt += step;
+            let (axis, spin) = (d.axis, d.spin);
+            t.rotation = Quat::from_axis_angle(axis, step) * Quat::from_rotation_y(spin * dt) * t.rotation;
+        } else {
+            // Sink into the ground.
+            t.translation.y = floor - (d.age - LIE) / (GONE - LIE) * 1.6;
         }
     }
 }

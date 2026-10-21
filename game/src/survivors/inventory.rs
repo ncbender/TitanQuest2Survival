@@ -145,7 +145,8 @@ fn sync_preview(
     let eq = profile.equipment(&affixes);
     if heroes.is_empty() {
         let idle = eq.stance().idle;
-        commands.spawn((PreviewHero, PreviewStage, eq, CharacterAnim::looping(idle), Transform::from_translation(STAGE).with_rotation(Quat::from_rotation_y(0.35)), Visibility::default()));
+        // UpperBodyRig: the hero's part files must get the full (rigged) graph, whoever loads them first.
+        commands.spawn((PreviewHero, PreviewStage, crate::character::UpperBodyRig, eq, CharacterAnim::looping(idle), Transform::from_translation(STAGE).with_rotation(Quat::from_rotation_y(0.35)), Visibility::default()));
         commands.spawn((
             PreviewStage,
             Camera3d::default(),

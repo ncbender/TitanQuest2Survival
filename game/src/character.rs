@@ -26,6 +26,8 @@ impl Plugin for CharacterPlugin {
                     instantiate_parts,
                     merge_parts,
                     bind_players,
+                    freeze_animation,
+                    low_detail,
                     drive_animation,
                     blend_base,
                     drive_upper_body,
@@ -34,6 +36,67 @@ impl Plugin for CharacterPlugin {
                 )
                     .chain(),
             );
+    }
+}
+
+/// A character whose animation is switched off (e.g. off screen): its bones keep their last
+/// pose, so neither the animation nor the bone transforms cost anything. Removing it resumes
+/// the current `CharacterAnim`.
+#[derive(Component)]
+pub struct AnimationFrozen;
+
+/// A character drawn with its first part (the body) only: hair, manes, tusks and the like
+/// are hidden. Used for crowds far from the hero.
+#[derive(Component)]
+pub struct LowDetail;
+
+fn low_detail(
+    added: Query<Entity, Added<LowDetail>>,
+    mut removed: RemovedComponents<LowDetail>,
+    mut parts: Query<(&CharacterPart, &mut Visibility)>,
+    detail: Query<(), With<LowDetail>>,
+    new_parts: Query<Entity, Added<CharacterPart>>,
+) {
+    let mut changed: HashSet<Entity> = added.iter().collect();
+    changed.extend(removed.read());
+    // Parts spawned later follow their character's current detail.
+    for e in &new_parts {
+        if let Ok((p, _)) = parts.get(e) {
+            changed.insert(p.root);
+        }
+    }
+    if changed.is_empty() {
+        return;
+    }
+    for (part, mut vis) in &mut parts {
+        if part.index == 0 || !changed.contains(&part.root) {
+            continue;
+        }
+        let wanted = if detail.contains(part.root) { Visibility::Hidden } else { Visibility::Inherited };
+        if *vis != wanted {
+            *vis = wanted;
+        }
+    }
+}
+
+fn freeze_animation(
+    added: Query<Entity, Added<AnimationFrozen>>,
+    mut removed: RemovedComponents<AnimationFrozen>,
+    mut players: Query<(&PlayerOf, &mut AnimationPlayer)>,
+    mut anims: Query<&mut CharacterAnim>,
+) {
+    let frozen: HashSet<Entity> = added.iter().collect();
+    if !frozen.is_empty() {
+        for (of, mut player) in &mut players {
+            if frozen.contains(&of.root) {
+                player.stop_all();
+            }
+        }
+    }
+    for root in removed.read() {
+        if let Ok(mut anim) = anims.get_mut(root) {
+            anim.set_changed();
+        }
     }
 }
 
@@ -152,6 +215,11 @@ struct PartGraph {
     durations: HashMap<AnimationNodeIndex, f32>,
 }
 
+/// Clips that characters without `UpperBodyRig` (enemies) may use; empty = all. Bevy walks
+/// every node of a graph for every bone each frame, so graphs only get the clips in use.
+#[derive(Resource, Default)]
+pub struct ClipAllowlist(pub HashSet<&'static str>);
+
 /// One glTF + one animation graph per part file, shared by every character using it.
 #[derive(Resource, Default)]
 struct PartLibrary(HashMap<String, PartAssets>);
@@ -209,6 +277,7 @@ fn instantiate_parts(
     mut graphs: ResMut<Assets<AnimationGraph>>,
     pending: Query<(Entity, &PendingPart, &ChildOf)>,
     rigs: Query<(), With<UpperBodyRig>>,
+    allow: Option<Res<ClipAllowlist>>,
 ) {
     for (entity, part, parent) in &pending {
         let entry = library
@@ -222,6 +291,9 @@ fn instantiate_parts(
             // Graphs are shared per part file; a file is either worn by rigged characters or not.
             let rigged = rigs.contains(parent.parent());
             for (name, clip) in &gltf.named_animations {
+                if !rigged && allow.as_ref().is_some_and(|a| !a.0.is_empty() && !a.0.contains(name.as_ref())) {
+                    continue;
+                }
                 base.insert(name.to_string(), graph.add_clip(clip.clone(), 1.0, graph.root));
                 if rigged {
                     let duration = clips.get(clip).map_or(1.0, |c| c.duration());
@@ -355,7 +427,7 @@ struct BaseBlend {
 fn drive_animation(
     mut commands: Commands,
     library: Res<PartLibrary>,
-    changed: Query<(Entity, &CharacterAnim), Changed<CharacterAnim>>,
+    changed: Query<(Entity, &CharacterAnim), (Changed<CharacterAnim>, Without<AnimationFrozen>)>,
     mut players: Query<(Entity, &PlayerOf, &mut AnimationPlayer, Option<&mut BaseBlend>)>,
 ) {
     if changed.is_empty() {

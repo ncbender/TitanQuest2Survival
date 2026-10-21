@@ -311,6 +311,11 @@ pub const ELDER_CROCOLISK: EnemyDef = EnemyDef {
     ..CROCOLISK
 };
 
+/// Every clip an enemy plays (run, attack, spawn).
+pub fn used_clips() -> std::collections::HashSet<&'static str> {
+    ALL.iter().flat_map(|d| [Some(d.run), Some(d.attack), d.spawn.map(|s| s.0)]).flatten().collect()
+}
+
 /// Every type (gallery test).
 pub const ALL: &[&EnemyDef] = &[
     &SPIDER, &BOARMAN, &GIANT_BOAR, &SKELETON, &HARPY, &CYCLOPS, &WOLF, &SCORPION, &GIANT_BAT, &CRAB, &LION, &CROCOLISK, &BOARMAN_MAGE, &LICH, &LICH_LORD,

@@ -69,7 +69,7 @@ pub fn plugin(app: &mut App) {
             FixedUpdate,
             (rebuild_grid, spawn_waves, chase_and_attack, move_enemy_shots).chain().in_set(EnemySet).run_if(in_state(GameState::Playing)),
         )
-        .add_systems(Update, (dress_enemy_shots, place_enemy_shots));
+        .add_systems(Update, (dress_enemy_shots, place_enemy_shots, freeze_offscreen, crowd_detail));
 }
 
 /// A bolt thrown by a ranged enemy; only hits the hero.
@@ -127,6 +127,63 @@ fn dress_enemy_shots(mut commands: Commands, fx: Res<crate::fx::Fx>, flipbook: R
 fn place_enemy_shots(ground: Res<Ground>, mut shots: Query<(&Pos, &mut Transform), With<EnemyShot>>) {
     for (pos, mut t) in &mut shots {
         t.translation = Vec3::new(pos.0.x, ground.stand(pos.0) + 1.3, pos.0.y);
+    }
+}
+
+/// Enemies outside the view (with a margin) stop animating and are hidden; they still move
+/// and fight.
+fn freeze_offscreen(
+    mut commands: Commands,
+    mut frame: Local<u32>,
+    camera: Query<(&Camera, &GlobalTransform)>,
+    ground: Res<Ground>,
+    mut enemies: Query<(Entity, &Pos, &mut Visibility, Has<crate::character::AnimationFrozen>), With<Enemy>>,
+) {
+    // Every few frames is enough; enemies walk in from beyond the margin.
+    *frame += 1;
+    if *frame % 4 != 0 {
+        return;
+    }
+    let Ok((camera, cam)) = camera.single() else { return };
+    for (e, pos, mut vis, frozen) in &mut enemies {
+        let world = Vec3::new(pos.0.x, ground.stand(pos.0) + 1.0, pos.0.y);
+        let visible = camera.world_to_ndc(cam, world).is_some_and(|n| n.x.abs() < 1.25 && n.y.abs() < 1.35 && n.z > 0.0);
+        // Hidden characters also skip skinning and render extraction (their parts are the cost).
+        if visible && frozen {
+            commands.entity(e).remove::<crate::character::AnimationFrozen>();
+            *vis = Visibility::Inherited;
+        } else if !visible && !frozen {
+            commands.entity(e).insert(crate::character::AnimationFrozen);
+            *vis = Visibility::Hidden;
+        }
+    }
+}
+
+/// Enemies drawn with all their parts; the rest of the crowd shows the body only.
+const FULL_DETAIL: usize = 200;
+
+fn crowd_detail(
+    mut commands: Commands,
+    mut frame: Local<u32>,
+    hero: Query<&Pos, With<Hero>>,
+    enemies: Query<(Entity, &Pos, Has<crate::character::LowDetail>), With<Enemy>>,
+) {
+    *frame += 1;
+    if *frame % 10 != 0 {
+        return;
+    }
+    let Ok(hero) = hero.single() else { return };
+    let mut all: Vec<(Entity, f32, bool)> = enemies.iter().map(|(e, p, low)| (e, p.0.distance_squared(hero.0), low)).collect();
+    if all.len() > FULL_DETAIL {
+        all.select_nth_unstable_by(FULL_DETAIL, |a, b| a.1.total_cmp(&b.1));
+    }
+    for (i, (e, _, low)) in all.into_iter().enumerate() {
+        let want_low = i >= FULL_DETAIL;
+        if want_low && !low {
+            commands.entity(e).insert(crate::character::LowDetail);
+        } else if !want_low && low {
+            commands.entity(e).remove::<crate::character::LowDetail>();
+        }
     }
 }
 

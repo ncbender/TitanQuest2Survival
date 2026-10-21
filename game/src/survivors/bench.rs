@@ -43,7 +43,9 @@ fn run_bench(
         bench.spawned = true;
         for i in 0..bench.enemies {
             let angle = i as f32 * 2.399; // golden angle: even spread
-            let dist = 8.0 + 14.0 * (i as f32 / bench.enemies.max(1) as f32).sqrt();
+            // TQ2_BENCH_SPREAD=<m>: spread them wider (like a real horde, partly off screen).
+            let spread: f32 = std::env::var("TQ2_BENCH_SPREAD").ok().and_then(|v| v.parse().ok()).unwrap_or(14.0);
+            let dist = 8.0 + spread * (i as f32 / bench.enemies.max(1) as f32).sqrt();
             spawn_boarman_at(&mut commands, hero_pos.0 + Vec2::from_angle(angle) * dist, config::ENEMY_HP * 1000.0);
         }
     }
