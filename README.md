@@ -8,7 +8,8 @@ player extracts it from their own copy.
 
 - Titan Quest II (Steam) at the default install path
 - .NET 10 SDK, Rust (stable, MSVC toolchain), git
-- Build Tools for Visual Studio 2022 (free) with "Desktop development with C++" (MSVC linker +
+- Build Tools for Visual Studio 2022 (free) with the workload "Desktop development with C++"
+  (not "Game development with C++") (MSVC linker +
   Windows SDK, which Rust uses on Windows to link the .exe; also compiles the C++ animation
   decoder). The full Visual Studio IDE is not needed; `rustup` offers to install them.
 
@@ -54,7 +55,7 @@ cargo run --release
 WASD move · Q/E rotate camera · mouse wheel zoom · 1–3 / click pick an upgrade · Esc pause · R restart
 
 Create a hero (starting weapon and a TQ2 mastery) in the main menu. Items from chests go to your
-stash when a run ends; equip them in the **Armoury** and spend active/passive points on TQ2's
+stash when a run ends; equip them in the **Inventory** (drag and drop or right-click; upgrade and recycle for gold) and spend active/passive points on TQ2's
 skills in **Masteries** between runs. Your progress is saved in `save/profile.json`. After
 pulling a new version, run the assets step again (new weapons, animations, masteries, UI).
 

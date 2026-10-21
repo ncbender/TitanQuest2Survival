@@ -32,7 +32,8 @@ pub struct Character {
     pub actives: BTreeMap<String, u32>,
     /// Learned passives → level.
     pub passives: BTreeMap<String, u32>,
-    /// Learned skills that cast themselves during runs.
+    /// Skills chosen for runs in earlier versions (kept so old saves load; level-ups offer
+    /// all learned skills now).
     pub equipped: Vec<String>,
     /// Worn items (stash ids).
     pub main: Option<u64>,
@@ -84,7 +85,16 @@ pub struct Profile {
     /// Arena chosen last (id from arenas.rs) and arenas survived; unlocks are shared by all heroes.
     pub arena: String,
     pub cleared: Vec<String>,
+    /// Gold (from runs and recycling), shared by all heroes like the stash.
+    pub gold: u32,
+    /// Upgrades of the bag (each adds `BAG_STEP` slots).
+    pub bag_level: u32,
 }
+
+/// Bag slots without upgrades, per upgrade and at most.
+pub const BAG_BASE: usize = 16;
+pub const BAG_STEP: usize = 8;
+pub const BAG_MAX_LEVEL: u32 = 6;
 
 impl Deref for Profile {
     type Target = Character;
@@ -112,6 +122,7 @@ struct ProfilePath(PathBuf);
 pub struct LastReward {
     pub active: u32,
     pub passive: u32,
+    pub gold: u32,
     pub items: Vec<(String, super::items::Rarity)>,
 }
 
@@ -147,6 +158,56 @@ impl Profile {
         self.stash.iter().find(|i| i.uid == uid)
     }
 
+    /// Slots of the bag.
+    pub fn bag_capacity(&self) -> usize {
+        BAG_BASE + BAG_STEP * self.bag_level as usize
+    }
+
+    /// Items in the bag: everything in the stash that no hero wears.
+    pub fn bag(&self) -> Vec<&ItemInstance> {
+        self.stash.iter().filter(|i| self.worn_by(i.uid).is_none()).collect()
+    }
+
+    /// Gold for the next bag upgrade (None at the maximum).
+    pub fn bag_upgrade_cost(&self) -> Option<u32> {
+        (self.bag_level < BAG_MAX_LEVEL).then(|| 150 * 2u32.pow(self.bag_level))
+    }
+
+    pub fn upgrade_bag(&mut self) -> Result<(), String> {
+        let cost = self.bag_upgrade_cost().ok_or("the bag is as large as it gets")?;
+        if self.gold < cost {
+            return Err(format!("needs {cost} gold"));
+        }
+        self.gold -= cost;
+        self.bag_level += 1;
+        Ok(())
+    }
+
+    /// Raises an item's upgrade level for gold (+5 % to all its stats).
+    pub fn upgrade_item(&mut self, uid: u64) -> Result<(), String> {
+        let cost = self.item(uid).ok_or("unknown item")?.upgrade_cost().ok_or("fully upgraded")?;
+        if self.gold < cost {
+            return Err(format!("needs {cost} gold"));
+        }
+        self.gold -= cost;
+        if let Some(i) = self.stash.iter_mut().find(|i| i.uid == uid) {
+            i.level += 1;
+        }
+        Ok(())
+    }
+
+    /// Recycles an unworn item into gold.
+    pub fn salvage(&mut self, uid: u64) -> Result<u32, String> {
+        if let Some(c) = self.worn_by(uid) {
+            return Err(format!("worn by {}", self.characters[c].name));
+        }
+        let i = self.stash.iter().position(|i| i.uid == uid).ok_or("unknown item")?;
+        let gold = self.stash[i].salvage_value();
+        self.stash.remove(i);
+        self.gold += gold;
+        Ok(gold)
+    }
+
     /// The character (index) wearing an item.
     pub fn worn_by(&self, uid: u64) -> Option<usize> {
         self.characters.iter().position(|c| c.worn().contains(&Some(uid)))
@@ -158,17 +219,17 @@ impl Profile {
         let get = |uid: Option<u64>| uid.and_then(|u| self.item(u)).and_then(|i| Some((i, i.item()?)));
         if let Some((inst, Item::Weapon(w))) = get(self.main) {
             eq.equip_main(w);
-            eq.main_quality = inst.quality;
+            eq.main_quality = inst.effective_quality();
             inst.add_to(&mut eq.bonus, book);
         }
         if let Some((inst, Item::Armor(a))) = get(self.armor) {
             eq.armor = a;
-            eq.armor_quality = inst.quality;
+            eq.armor_quality = inst.effective_quality();
             inst.add_to(&mut eq.bonus, book);
         }
         if let Some((inst, item)) = get(self.off) {
             if eq.equip_off(OffHand::from_item(item)) {
-                eq.off_quality = inst.quality;
+                eq.off_quality = inst.effective_quality();
                 inst.add_to(&mut eq.bonus, book);
             }
         }
@@ -297,6 +358,12 @@ pub fn points_for(run: &Run) -> (u32, u32) {
     (active, passive)
 }
 
+/// Gold for a run: kills, minutes survived and a victory bonus, scaled by the arena.
+pub fn gold_for(run: &Run, tier: f32) -> u32 {
+    let base = run.kills / 3 + 10 * (run.time as u32 / 60) + if run.won { 150 } else { 0 };
+    (base as f32 * tier).round() as u32
+}
+
 pub fn plugin(app: &mut App) {
     let path = profile_path();
     let profile = load(&path);
@@ -371,6 +438,7 @@ pub fn bank_run(
     book: Res<AffixBook>,
     arena: Res<super::arenas::CurrentArena>,
 ) {
+    let mut salvaged = 0;
     if run.banked || run.level == 0 {
         return;
     }
@@ -379,9 +447,17 @@ pub fn bank_run(
     let mut items = vec![];
     for mut item in loot.0.drain(..) {
         item.uid = profile.new_uid();
+        // A full bag recycles the item into gold.
+        if profile.bag().len() >= profile.bag_capacity() {
+            salvaged += item.salvage_value();
+            items.push((format!("{} (bag full: recycled)", item.name(&book)), item.rarity));
+            continue;
+        }
         items.push((item.name(&book), item.rarity));
         profile.stash.push(item);
     }
+    let gold = gold_for(&run, arena.0.tier) + salvaged;
+    profile.gold += gold;
     profile.active_points += active;
     profile.passive_points += passive;
     profile.runs += 1;
@@ -389,8 +465,8 @@ pub fn bank_run(
     if run.won && !profile.cleared.iter().any(|c| c == arena.0.id) {
         profile.cleared.push(arena.0.id.to_string());
     }
-    info!("run banked: +{active} active / +{passive} passive points, items {items:?}");
-    *reward = LastReward { active, passive, items };
+    info!("run banked: +{active} active / +{passive} passive points, +{gold} gold, items {items:?}");
+    *reward = LastReward { active, passive, gold, items };
 }
 
 #[cfg(test)]
@@ -402,6 +478,26 @@ mod tests {
         let uid = p.new_uid();
         p.stash.push(ItemInstance::plain(uid, item));
         uid
+    }
+
+    #[test]
+    fn gold_buys_upgrades_and_recycling_gives_gold() {
+        let mut p = Profile::default();
+        p.new_hero(&SWORD);
+        let axe = add(&mut p, Item::Weapon(&AXE));
+        assert!(p.upgrade_item(axe).is_err(), "no gold yet");
+        p.gold = 1000;
+        p.upgrade_item(axe).unwrap();
+        assert_eq!(p.item(axe).unwrap().level, 1);
+        assert!((p.item(axe).unwrap().power() - 1.05).abs() < 1e-6);
+        let worn = p.main.unwrap();
+        assert!(p.salvage(worn).is_err(), "worn items stay");
+        let before = p.gold;
+        p.salvage(axe).unwrap();
+        assert!(p.gold > before && p.item(axe).is_none());
+        let cap = p.bag_capacity();
+        p.upgrade_bag().unwrap();
+        assert_eq!(p.bag_capacity(), cap + BAG_STEP);
     }
 
     #[test]

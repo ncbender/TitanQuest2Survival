@@ -26,7 +26,6 @@ pub enum TreeAction {
     Tab(usize),
     Select(NodeRef),
     Learn,
-    Equip,
     OpenChooser,
     Preview(usize),
     Choose,
@@ -70,11 +69,6 @@ fn tree_input(mut clicked: ResMut<TreeClicked>, mut view: ResMut<TreeView>, mut 
             if let Some(n) = view.selected {
                 let id = node_id(&book, n);
                 result = if n.passive { skills::learn_passive(&mut profile, &book, &id) } else { skills::learn_active(&mut profile, &book, &id) };
-            }
-        }
-        TreeAction::Equip => {
-            if let Some(n) = view.selected.filter(|n| !n.passive) {
-                result = skills::toggle_equip(&mut profile, &node_id(&book, n));
             }
         }
         TreeAction::OpenChooser => {
@@ -181,8 +175,9 @@ pub fn build(commands: &mut Commands, assets: &AssetServer, title: &TitleFont, p
                         None => format!("Mastery level {level}  (all tiers open)"),
                     };
                     l.spawn((Text::new(progress), text(14.0), TextColor(GOLD)));
-                    l.spawn((Text::new(format!("Skills used in runs ({}/{MAX_EQUIPPED})", profile.equipped.len())), title.at(16.0), Node { margin: UiRect::top(Val::Px(8.0)), ..default() }));
-                    for id in &profile.equipped {
+                    l.spawn((Text::new("Learned skills"), title.at(16.0), Node { margin: UiRect::top(Val::Px(8.0)), ..default() }));
+                    l.spawn((Text::new(format!("Level-ups in runs offer them, up to {MAX_EQUIPPED} per run.")), text(13.0), TextColor(TEXT)));
+                    for id in profile.actives.keys() {
                         if let Some((_, _, s)) = book.active(id) {
                             l.spawn(Node { align_items: AlignItems::Center, column_gap: Val::Px(8.0), ..default() }).with_children(|r| {
                                 if let Some(icon) = &s.icon {
@@ -192,7 +187,7 @@ pub fn build(commands: &mut Commands, assets: &AssetServer, title: &TitleFont, p
                             });
                         }
                     }
-                    if profile.equipped.is_empty() {
+                    if profile.actives.is_empty() {
                         l.spawn((Text::new("Learn an active skill to use it in runs."), text(16.0), TextColor(TEXT)));
                     }
                 });
@@ -217,7 +212,7 @@ pub fn build(commands: &mut Commands, assets: &AssetServer, title: &TitleFont, p
                                 let n = NodeRef { mastery: tab, tier: t, passive: false, index: i };
                                 let lvl = profile.active_level(&a.id);
                                 let playable = abilities::spec(&a.id).is_some();
-                                let equipped = profile.equipped.contains(&a.id);
+                                let equipped = lvl > 0;
                                 node(row, assets, n, a.icon.as_deref(), &format!("{lvl}/{ACTIVE_MAX_LEVEL}"), open && playable, lvl > 0, equipped, view.selected == Some(n));
                             }
                             row.spawn(Node { width: Val::Px(2.0), height: Val::Px(46.0), margin: UiRect::horizontal(Val::Px(4.0)), ..default() })
@@ -336,10 +331,6 @@ fn details(d: &mut ChildSpawnerCommands, assets: &AssetServer, title: &TitleFont
         let label = if level == 0 { "Learn (1 Active Point)" } else { "Level up (1 Active Point)" };
         d.spawn(Node { column_gap: Val::Px(10.0), ..default() }).with_children(|r| {
             r.spawn(button(assets, label, 280.0, blocked.is_none(), true)).observe(click(TreeAction::Learn));
-            if level > 0 {
-                let equipped = profile.equipped.contains(&a.id);
-                r.spawn(button(assets, if equipped { "Unequip" } else { "Use in runs" }, 150.0, true, false)).observe(click(TreeAction::Equip));
-            }
         });
         if let Some(why) = blocked {
             d.spawn((Text::new(why), text(16.0), TextColor(TEXT)));

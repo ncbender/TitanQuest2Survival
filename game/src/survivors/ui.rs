@@ -1,5 +1,8 @@
-//! Building blocks for menus in TQ2's look: its gold frames (9-sliced), gemstone buttons,
-//! marble background and coloured text spans.
+//! Building blocks for menus in TQ2's look: warm marble backdrop with a vignette, brown
+//! stone panels in gold frames (9-sliced), gemstone buttons and coloured text spans.
+//!
+//! Colours: panels are warm dark brown (never black) so cream text and TQ2's dark icon art
+//! stay readable on them.
 use bevy::prelude::*;
 
 use super::mastery_data::{ui_texture, TEXT};
@@ -18,12 +21,38 @@ pub fn stretched(assets: &AssetServer, name: &str, color: Color) -> ImageNode {
     ImageNode { color, image_mode: NodeImageMode::Stretch, ..ImageNode::new(assets.load(ui_texture(name))) }
 }
 
+/// Asset path of a TQ2 UI texture.
+pub fn ui_path(name: &str) -> String {
+    ui_texture(name)
+}
+
 /// Any texture below the asset root, stretched.
 pub fn image(assets: &AssetServer, path: String, color: Color) -> ImageNode {
     ImageNode { color, image_mode: NodeImageMode::Stretch, ..ImageNode::new(assets.load(path)) }
 }
 
-/// Full-screen dark marble backdrop (TQ2 menu background).
+/// Fill of panels and cards: warm dark brown stone.
+pub const PANEL_FILL: Color = Color::srgba(0.15, 0.12, 0.095, 0.94);
+/// Fill of rows and slots inside panels (a little lighter).
+pub const ROW_FILL: Color = Color::srgba(0.21, 0.17, 0.13, 0.95);
+
+/// A 9-sliced frame over its parent's whole box. Bevy draws a node's own image only inside
+/// its padding, so frames around padded content must be a child like this one (spawned
+/// first, it stays behind the content).
+pub fn frame(assets: &AssetServer, name: &str, border: f32, color: Color) -> impl Bundle {
+    (cover(0.0), sliced(assets, name, border, color), ZIndex(-1), Pickable::IGNORE)
+}
+
+/// A colour fill over the parent's box, `inset` from its edges (inside a frame's art).
+pub fn fill(color: Color, inset: f32) -> impl Bundle {
+    (cover(inset), BackgroundColor(color), ZIndex(-1), Pickable::IGNORE)
+}
+
+fn cover(inset: f32) -> Node {
+    Node { position_type: PositionType::Absolute, left: Val::Px(inset), right: Val::Px(inset), top: Val::Px(inset), bottom: Val::Px(inset), ..default() }
+}
+
+/// Full-screen TQ2 menu background: warm marble with a darkened rim.
 pub fn backdrop(assets: &AssetServer, marker: impl Component) -> impl Bundle {
     (
         Node {
@@ -35,20 +64,29 @@ pub fn backdrop(assets: &AssetServer, marker: impl Component) -> impl Bundle {
             row_gap: Val::Px(10.0),
             ..default()
         },
-        // The marble has soft transparent edges; a dark fill keeps the scene from showing through.
-        BackgroundColor(Color::srgb(0.035, 0.033, 0.04)),
-        stretched(assets, "t_backdrop_marble_dark", Color::srgb(0.55, 0.52, 0.5)),
+        BackgroundColor(Color::srgb(0.16, 0.13, 0.105)),
+        children![
+            (cover(0.0), stretched(assets, "t_marble_bg_ui", Color::srgb(0.42, 0.355, 0.29)), ZIndex(-1), Pickable::IGNORE),
+            (cover(0.0), stretched(assets, "t_overlay_vignette", Color::srgba(0.0, 0.0, 0.0, 0.85)), ZIndex(-1), Pickable::IGNORE),
+        ],
         marker,
     )
 }
 
-/// A panel in a gold frame with a dark fill.
+/// A panel: brown stone in a gold frame. The padding keeps content clear of the frame art.
 pub fn panel(assets: &AssetServer, node: Node) -> impl Bundle {
     (
-        Node { padding: UiRect::all(Val::Px(18.0)), ..node },
-        BackgroundColor(Color::srgba(0.03, 0.03, 0.04, 0.82)),
-        sliced(assets, "t_frame_gold_medium02", 22.0, Color::WHITE),
+        Node { padding: UiRect::all(Val::Px(26.0)), ..node },
+        children![fill(PANEL_FILL, 5.0), frame(assets, "t_frame_gold_medium02", 26.0, Color::WHITE)],
     )
+}
+
+/// A section title with TQ2's thin gold ornament line under it.
+pub fn headline(parent: &mut ChildSpawnerCommands, assets: &AssetServer, title: &crate::fonts::TitleFont, label: impl Into<String>, size: f32) {
+    parent.spawn(Node { flex_direction: FlexDirection::Column, align_items: AlignItems::Center, margin: UiRect::bottom(Val::Px(6.0)), flex_shrink: 0.0, ..default() }).with_children(|h| {
+        h.spawn((Text::new(label), title.at(size), TextColor(super::mastery_data::GOLD)));
+        h.spawn((Node { width: Val::Px(size * 9.0), height: Val::Px(10.0), margin: UiRect::top(Val::Px(2.0)), ..default() }, stretched(assets, "t_frame_gold_headline_thin_top", Color::WHITE)));
+    });
 }
 
 /// A TQ2 gemstone button with a label; `enabled = false` uses the grey deactivated stone.
@@ -119,14 +157,14 @@ pub fn item_card(
             border: UiRect::all(Val::Px(1.0)),
             ..default()
         },
-        BackgroundColor(Color::srgba(0.07, 0.065, 0.06, 0.92)),
+        BackgroundColor(ROW_FILL),
         BorderColor::all(color.with_alpha(0.6)),
     ));
     card.with_children(|c| {
         c.spawn((
             Node { width: Val::Px(64.0), height: Val::Px(64.0), padding: UiRect::all(Val::Px(6.0)), flex_shrink: 0.0, ..default() },
             BackgroundColor(color.with_alpha(0.18)),
-            sliced(assets, "t_frame_gold_small05", 8.0, Color::WHITE),
+            children![frame(assets, "t_frame_gold_small05", 8.0, Color::WHITE)],
         ))
         .with_children(|f| {
             if let Some(item) = inst.item() {
@@ -135,7 +173,8 @@ pub fn item_card(
         });
         c.spawn(Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(2.0), flex_grow: 1.0, ..default() }).with_children(|t| {
             t.spawn((Text::new(inst.name(book)), title.at(20.0), TextColor(color)));
-            t.spawn((Text::new(format!("{} {kind} · {}", inst.rarity.name(), inst.base_line())), text(15.0), TextColor(TEXT)));
+            let upgrade = if inst.level > 0 { format!(" · Upgrade {}", inst.level) } else { String::new() };
+            t.spawn((Text::new(format!("{} {kind} · {}{upgrade}", inst.rarity.name(), inst.base_line())), text(15.0), TextColor(TEXT)));
             for line in inst.lines(book) {
                 rich(t, line, 15.0, Val::Auto);
             }

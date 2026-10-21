@@ -4,13 +4,14 @@
 use bevy::prelude::*;
 
 use super::arenas::{self, ARENAS};
+use super::inventory;
 use super::equipment::{AttackKind, Item, WEAPONS};
 use super::items::AffixBook;
 use super::mastery_data::{MasteryBook, GOLD, TEXT};
-use super::profile::{Profile, Slot};
+use super::profile::Profile;
 use super::settings::SettingsOpen;
 use super::skilltree::{self, TreeView};
-use super::ui::{self, backdrop, button, panel, text};
+use super::ui::{backdrop, button, panel, text};
 use super::{GameState, StartRun};
 use crate::fonts::TitleFont;
 
@@ -35,10 +36,6 @@ pub enum Page {
     Arenas,
 }
 
-/// The armoury slot whose stash items are listed.
-#[derive(Resource, Default)]
-struct ArmorySlot(Slot);
-
 /// A character whose delete button was pressed once (press again to confirm).
 #[derive(Resource, Default)]
 struct DeleteArmed(Option<usize>);
@@ -58,17 +55,12 @@ enum MenuAction {
     Back,
     SelectCharacter(usize),
     DeleteCharacter(usize),
-    SelectSlot(Slot),
-    /// Equip the stash item with this uid in the selected slot.
-    Equip(u64),
-    EmptyOffHand,
     Settings,
 }
 
 pub fn plugin(app: &mut App) {
     app.init_resource::<Clicked>()
         .init_resource::<Page>()
-        .init_resource::<ArmorySlot>()
         .init_resource::<DeleteArmed>()
         .add_systems(OnEnter(GameState::MainMenu), (open_menu, show_page).chain())
         .add_systems(OnExit(GameState::MainMenu), despawn::<MainMenuUi>)
@@ -79,7 +71,6 @@ pub fn plugin(app: &mut App) {
                 show_page.run_if(
                     resource_changed::<Page>
                         .or_eager(resource_changed::<Profile>)
-                        .or_eager(resource_changed::<ArmorySlot>)
                         .or_eager(resource_changed::<DeleteArmed>)
                         .or_eager(resource_changed::<TreeView>),
                 ),
@@ -159,8 +150,9 @@ fn show_page(
     book: Res<MasteryBook>,
     affixes: Res<AffixBook>,
     view: Res<TreeView>,
-    slot: Res<ArmorySlot>,
     armed: Res<DeleteArmed>,
+    inv: Res<inventory::InvState>,
+    preview: Res<inventory::Preview>,
     old: Query<Entity, With<MainMenuUi>>,
 ) {
     for e in &old {
@@ -188,7 +180,7 @@ fn show_page(
                     ));
                     p.spawn(button(&assets, "Start Run  (Enter)", 380.0, true, true)).observe(click(MenuAction::Open(Page::Arenas)));
                     p.spawn(button(&assets, "Masteries  (S)", 380.0, true, false)).observe(click(MenuAction::Open(Page::Skills)));
-                    p.spawn(button(&assets, "Armoury  (A)", 380.0, true, false)).observe(click(MenuAction::Open(Page::Armory)));
+                    p.spawn(button(&assets, "Inventory  (I)", 380.0, true, false)).observe(click(MenuAction::Open(Page::Armory)));
                     p.spawn(button(&assets, "Characters  (C)", 380.0, true, false)).observe(click(MenuAction::Open(Page::Characters)));
                 } else {
                     p.spawn(button(&assets, "New Hero  (Enter)", 380.0, true, true)).observe(click(MenuAction::Open(Page::Hero)));
@@ -277,105 +269,36 @@ fn show_page(
             });
         }
         Page::Hero => {
-            commands.spawn(overlay()).with_children(|p| {
-                p.spawn((Text::new("Create Your Hero"), title.at(48.0)));
-                p.spawn((Text::new("Choose your starting weapon – it decides your auto-attack. Then choose a mastery."), text(20.0)));
+            commands.spawn(backdrop(&assets, MainMenuUi)).with_children(|p| {
+                p.spawn((Text::new("Create Your Hero"), title.at(44.0)));
+                p.spawn((Text::new("Choose your starting weapon – it decides your auto-attack. Then choose a mastery."), text(18.0), TextColor(TEXT)));
                 if profile.created {
-                    p.spawn((Text::new("Your other heroes and the shared stash are kept."), text(18.0), TextColor(TEXT)));
+                    p.spawn((Text::new("Your other heroes and the shared stash are kept."), text(16.0), TextColor(TEXT)));
                 }
-                for (i, w) in WEAPONS.iter().enumerate() {
-                    let reach = if w.kind == AttackKind::Sweep { format!("{:.1} m reach", w.speed_or_radius) } else { format!("{:.0} m range", w.range) };
-                    let hands = if w.two_handed { "two-handed" } else { "one-handed" };
-                    p.spawn(panel(&assets, Node { width: Val::Px(640.0), column_gap: Val::Px(14.0), align_items: AlignItems::Center, ..default() }))
-                        .with_children(|c| {
-                            c.spawn((Node { width: Val::Px(44.0), height: Val::Px(78.0), ..default() }, ui::image(&assets, Item::Weapon(w).icon(), Color::WHITE)));
-                            c.spawn(Node { flex_direction: FlexDirection::Column, ..default() }).with_children(|t| {
-                                t.spawn((Text::new(format!("{}  {}", i + 1, w.name)), title.at(24.0)));
-                                t.spawn((Text::new(format!("{hands} – {}", w.attack_text())), text(18.0)));
-                                t.spawn((Text::new(format!("{:.0} damage · every {:.2} s · {reach}", w.damage, w.cooldown)), text(15.0), TextColor(TEXT)));
-                            });
-                        })
-                        .observe(click(MenuAction::Pick(i)));
-                }
-                p.spawn((Text::new("1–5 or click to choose · Esc back"), text(16.0)));
+                p.spawn(Node { column_gap: Val::Px(12.0), margin: UiRect::top(Val::Px(16.0)), flex_grow: 1.0, align_items: AlignItems::FlexStart, height: Val::Px(360.0), ..default() }).with_children(|row| {
+                    for (i, w) in WEAPONS.iter().enumerate() {
+                        let reach = if w.kind == AttackKind::Sweep { format!("{:.1} m reach", w.speed_or_radius) } else { format!("{:.0} m range", w.range) };
+                        let hands = if w.two_handed { "Two-handed" } else { "One-handed" };
+                        row.spawn(panel(&assets, Node { width: Val::Px(234.0), height: Val::Px(350.0), flex_direction: FlexDirection::Column, align_items: AlignItems::Center, row_gap: Val::Px(8.0), ..default() }))
+                            .with_children(|c| {
+                                c.spawn((Text::new(format!("{}", i + 1)), title.at(20.0), TextColor(GOLD)));
+                                c.spawn((Node { width: Val::Px(70.0), height: Val::Px(124.0), flex_shrink: 0.0, ..default() }, ImageNode { image_mode: NodeImageMode::Auto, ..ImageNode::new(assets.load(Item::Weapon(w).icon())) }));
+                                c.spawn((Text::new(w.name), title.at(22.0), TextLayout::justify(Justify::Center)));
+                                c.spawn((Text::new(format!("{hands} – {}", w.attack_text())), text(15.0), TextColor(TEXT), TextLayout::justify(Justify::Center)));
+                                c.spawn((Text::new(format!("{:.0} damage · every {:.2} s\n{reach}", w.damage, w.cooldown)), text(14.0), TextColor(GOLD), TextLayout::justify(Justify::Center)));
+                            })
+                            .observe(click(MenuAction::Pick(i)));
+                    }
+                });
+                p.spawn(Node { align_items: AlignItems::Center, column_gap: Val::Px(18.0), ..default() }).with_children(|f| {
+                    f.spawn(button(&assets, "Back (Esc)", 200.0, true, false)).observe(click(MenuAction::Back));
+                    f.spawn((Text::new("1–5 or click to choose"), text(16.0), TextColor(TEXT)));
+                });
             });
         }
-        Page::Armory => armory_page(&mut commands, &assets, &title, &profile, &affixes, slot.0),
+        Page::Armory => inventory::build(&mut commands, &inventory::Ctx { assets: &assets, title: &title, profile: &profile, affixes: &affixes, state: &inv, preview: &preview }),
         Page::Skills => skilltree::build(&mut commands, &assets, &title, &profile, &book, &view),
     }
-}
-
-fn armory_page(commands: &mut Commands, assets: &AssetServer, title: &TitleFont, profile: &Profile, affixes: &AffixBook, selected: Slot) {
-    let eq = profile.equipment(affixes);
-    let worn = [(Slot::Main, "Main hand", profile.main), (Slot::Off, "Off hand", profile.off), (Slot::Armor, "Armour", profile.armor)];
-    let b = eq.bonus;
-    let mut stat_line = format!(
-        "{:.0} weapon damage every {:.2} s   ·   {:.0} % less damage taken   ·   skills ×{:.2}",
-        eq.weapon_damage() * (1.0 + b.weapon_pct),
-        eq.cooldown() / (1.0 + b.attack_speed),
-        eq.damage_reduction() * 100.0,
-        eq.skill_damage() * (1.0 + b.skill_pct)
-    );
-    if b.health > 0.0 {
-        stat_line += &format!("   ·   +{:.0} health", b.health);
-    }
-    if b.crit > 0.0 {
-        stat_line += &format!("   ·   +{:.0} % crit", b.crit * 100.0);
-    }
-    // Stash items for the selected slot, best rarity first; items worn by others are marked.
-    let mut listed: Vec<&super::items::ItemInstance> = profile.stash.iter().filter(|i| i.item().is_some_and(|it| selected.fits(it))).collect();
-    listed.sort_by(|a, b| b.rarity.cmp(&a.rarity).then(a.base.cmp(&b.base)));
-    commands.spawn(backdrop(assets, MainMenuUi)).with_children(|root| {
-        root.spawn(Node { align_items: AlignItems::Center, column_gap: Val::Px(20.0), ..default() }).with_children(|h| {
-            h.spawn((Text::new("Armoury"), title.at(44.0)));
-            h.spawn((Text::new(profile.name.clone()), title.at(26.0), TextColor(GOLD)));
-        });
-        root.spawn((Text::new(stat_line), text(18.0), TextColor(GOLD)));
-        root.spawn(Node { column_gap: Val::Px(18.0), flex_grow: 1.0, min_height: Val::Px(0.0), ..default() }).with_children(|body| {
-            body.spawn(panel(assets, Node { width: Val::Px(560.0), flex_shrink: 0.0, flex_direction: FlexDirection::Column, row_gap: Val::Px(10.0), ..default() }))
-                .with_children(|l| {
-                    l.spawn((Text::new("Equipped – click a slot"), title.at(22.0)));
-                    for (slot, label, uid) in worn {
-                        let border = if slot == selected { 3.0 } else { 0.0 };
-                        l.spawn((Node { flex_direction: FlexDirection::Column, border: UiRect::all(Val::Px(border)), padding: UiRect::all(Val::Px(4.0)), ..default() }, BorderColor::all(GOLD)))
-                            .with_children(|s| {
-                                s.spawn((Text::new(label), text(15.0), TextColor(TEXT)));
-                                match uid.and_then(|u| profile.item(u)) {
-                                    Some(inst) => ui::item_card(s, assets, title, inst, affixes, 520.0, None, |_| {}),
-                                    None => {
-                                        let empty = if slot == Slot::Off && eq.main.two_handed { "— (two-handed weapon)" } else { "— empty" };
-                                        s.spawn((Text::new(empty), title.at(20.0), TextColor(TEXT)));
-                                    }
-                                }
-                            })
-                            .observe(click(MenuAction::SelectSlot(slot)));
-                    }
-                });
-            body.spawn(panel(assets, Node { flex_grow: 1.0, flex_direction: FlexDirection::Column, row_gap: Val::Px(8.0), overflow: Overflow::scroll_y(), ..default() }))
-                .with_children(|s| {
-                    s.spawn((Text::new(format!("Shared stash – {} items", profile.stash.len())), title.at(22.0)));
-                    if selected == Slot::Off {
-                        let enabled = !eq.main.two_handed;
-                        s.spawn(button(assets, "Empty off hand", 260.0, enabled, false)).observe(click(MenuAction::EmptyOffHand));
-                    }
-                    if listed.is_empty() {
-                        s.spawn((Text::new("Nothing for this slot yet – open chests in runs."), text(18.0), TextColor(TEXT)));
-                    }
-                    for inst in listed {
-                        let note = match profile.worn_by(inst.uid) {
-                            Some(c) if c == profile.active => Some("worn".to_string()),
-                            Some(c) => Some(format!("worn by {}", profile.characters[c].name)),
-                            None => None,
-                        };
-                        let uid = inst.uid;
-                        ui::item_card(s, assets, title, inst, affixes, 640.0, note, |e| {
-                            e.observe(click(MenuAction::Equip(uid)));
-                        });
-                    }
-                });
-        });
-        root.spawn(button(assets, "Back (Esc)", 200.0, true, false)).observe(click(MenuAction::Back));
-    });
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -383,7 +306,6 @@ fn main_menu_input(
     keys: Res<ButtonInput<KeyCode>>,
     mut clicked: ResMut<Clicked>,
     mut page: ResMut<Page>,
-    mut slot: ResMut<ArmorySlot>,
     mut armed: ResMut<DeleteArmed>,
     mut profile: ResMut<Profile>,
     mut view: ResMut<TreeView>,
@@ -404,7 +326,7 @@ fn main_menu_input(
     let key_action = match *page {
         Page::Title if pressed(KeyCode::Enter) => Some(if profile.created { MenuAction::Open(Page::Arenas) } else { MenuAction::Open(Page::Hero) }),
         Page::Arenas if pressed(KeyCode::Enter) => Some(MenuAction::Start(ARENAS.iter().position(|a| a.id == profile.arena).unwrap_or(0))),
-        Page::Title if pressed(KeyCode::KeyA) && profile.created => Some(MenuAction::Open(Page::Armory)),
+        Page::Title if (pressed(KeyCode::KeyI) || pressed(KeyCode::KeyA)) && profile.created => Some(MenuAction::Open(Page::Armory)),
         Page::Title if pressed(KeyCode::KeyS) && profile.created => Some(MenuAction::Open(Page::Skills)),
         Page::Title if pressed(KeyCode::KeyC) && profile.created => Some(MenuAction::Open(Page::Characters)),
         Page::Title | Page::Characters if pressed(KeyCode::KeyN) => Some(MenuAction::Open(Page::Hero)),
@@ -466,15 +388,6 @@ fn main_menu_input(
             } else {
                 armed.0 = Some(i);
             }
-        }
-        MenuAction::SelectSlot(s) => slot.0 = s,
-        MenuAction::Equip(uid) => {
-            if let Err(e) = profile.equip(slot.0, Some(uid)) {
-                info!("cannot equip: {e}");
-            }
-        }
-        MenuAction::EmptyOffHand => {
-            let _ = profile.equip(Slot::Off, None);
         }
         MenuAction::Settings => settings_open.0 = true,
     }

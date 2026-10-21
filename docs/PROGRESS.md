@@ -152,6 +152,26 @@ the extra skeletons of mane/arm-hair parts were the main cost.
   theme never looks the same twice (verified: two seeds per theme differ in border, cover and
   clutter; 42–50 % of the free area 8+ m from obstacles).
 
+## Inventory, gold, spell bar, readable menus (2026-10-21)
+
+- Menus: warm marble backdrop with vignette, brown stone panels (no more black), frames as
+  separate child nodes (Bevy draws a node's image only inside its padding, which made frames
+  hug the text), smaller level-up icons, hero creation as cards. Verified by screenshots of
+  every page.
+- Inventory (replaces the armoury): the hero rendered live by a second camera into a texture,
+  slots for main hand / off hand / armour around it, the bag (16 slots, +8 per upgrade for
+  gold, up to 64), the anvil: upgrade an item for gold (+5 % to every stat per level, up to
+  +10) and recycle items into gold. Right-click equips/takes off; drag and drop between bag,
+  slots and the recycle zone. Gold from runs (kills, minutes, victory, scaled by the arena) and
+  from loot that does not fit into a full bag.
+- Skills: learned mastery skills are no longer equipped by hand. A run starts without skills;
+  each level-up offers learned skills until four are in the spell bar, then only levels and
+  TQ2 modifiers for them. Spell bar at the bottom with icon, level and cooldown shade.
+  Verified: offer "New skill – Call Lightning / Ice Shards", picked skill casts and shows.
+- Animation: base clips crossfade (0.2 s) instead of switching hard; while running, an attack
+  turns the hero at most 50° towards the target instead of flipping the body around.
+- Not verified yet in a real hand-played session: drag and drop (no automated mouse test).
+
 ## Blockers / risks
 
 - Usmap RVA is build-specific: a TQ2 patch requires re-running the dumper with the game open.

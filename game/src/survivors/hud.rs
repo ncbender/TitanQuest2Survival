@@ -9,7 +9,7 @@ use super::equipment::{LootOffer, RunLoot};
 use super::items::AffixBook;
 use super::mastery_data::{MasteryBook, GOLD, TEXT};
 use super::profile::LastReward;
-use super::ui::{self, sliced, text};
+use super::ui::{self, text};
 use crate::fonts::TitleFont;
 use crate::ground::Ground;
 use crate::survivors::enemies::Enemy;
@@ -33,10 +33,21 @@ struct EndPanel;
 #[derive(Component)]
 struct LootPanel;
 
+/// Spell bar slot `i` (the run's skills in the order they were gained), its icon, the
+/// darkening that shrinks while the skill cools down, and its level.
+#[derive(Component)]
+struct SpellIcon(usize);
+#[derive(Component)]
+struct SpellCooldown(usize);
+#[derive(Component)]
+struct SpellLevel(usize);
+
+const SPELL_SLOT: f32 = 58.0;
+
 pub fn plugin(app: &mut App) {
     app.init_resource::<ClickedChoice>()
         .add_systems(Startup, spawn_hud)
-        .add_systems(Update, (update_hud, hud_visibility, spawn_damage_numbers, float_damage_numbers))
+        .add_systems(Update, (update_hud, update_spell_bar, hud_visibility, spawn_damage_numbers, float_damage_numbers))
         // The panel shows the offer, so it must run after the offer is rolled.
         .add_systems(OnEnter(GameState::LevelUp), show_level_up.after(super::progression::make_offer))
         .add_systems(OnExit(GameState::LevelUp), despawn::<LevelUpPanel>)
@@ -56,7 +67,40 @@ fn bar(color: Color, marker: impl Component) -> impl Bundle {
     )
 }
 
-fn spawn_hud(mut commands: Commands) {
+fn spawn_hud(mut commands: Commands, assets: Res<AssetServer>) {
+    // The spell bar: four TQ2 slots at the bottom centre.
+    commands
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                bottom: Val::Px(14.0),
+                left: Val::Px(0.0),
+                right: Val::Px(0.0),
+                justify_content: JustifyContent::Center,
+                ..default()
+            },
+            HudRoot,
+            Pickable::IGNORE,
+        ))
+        .with_children(|row| {
+            row.spawn((Node { padding: UiRect::axes(Val::Px(18.0), Val::Px(10.0)), column_gap: Val::Px(8.0), ..default() }, Pickable::IGNORE)).with_children(|bar| {
+                bar.spawn(ui::fill(Color::srgba(0.1, 0.08, 0.06, 0.8), 3.0));
+                bar.spawn(ui::frame(&assets, "t_frame_gold_medium02", 18.0, Color::WHITE));
+                for i in 0..super::skills::MAX_EQUIPPED {
+                    bar.spawn((Node { width: Val::Px(SPELL_SLOT), height: Val::Px(SPELL_SLOT), padding: UiRect::all(Val::Px(4.0)), ..default() }, BackgroundColor(ui::ROW_FILL), Pickable::IGNORE))
+                        .with_children(|s| {
+                            s.spawn((Node { width: Val::Percent(100.0), height: Val::Percent(100.0), ..default() }, ImageNode::default(), Visibility::Hidden, SpellIcon(i)));
+                            s.spawn((
+                                Node { position_type: PositionType::Absolute, left: Val::Px(4.0), right: Val::Px(4.0), bottom: Val::Px(4.0), height: Val::Percent(0.0), ..default() },
+                                BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.62)),
+                                SpellCooldown(i),
+                            ));
+                            s.spawn(ui::frame(&assets, "t_frame_gold_small05", 8.0, Color::WHITE));
+                            s.spawn((Text::new(""), text(13.0), TextColor(GOLD), Node { position_type: PositionType::Absolute, right: Val::Px(5.0), bottom: Val::Px(2.0), ..default() }, SpellLevel(i)));
+                        });
+                }
+            });
+        });
     commands.spawn((
         Node { position_type: PositionType::Absolute, left: Val::Px(16.0), top: Val::Px(16.0), flex_direction: FlexDirection::Column, ..default() },
         HudRoot,
@@ -107,6 +151,42 @@ Boss: {} {:.0} %", e.def.name, hp.hp / hp.max * 100.0))
             run.kills,
             enemies.iter().count()
         );
+    }
+}
+
+/// Shows the run's skills with their cooldowns.
+fn update_spell_bar(
+    assets: Res<AssetServer>,
+    loadout: Option<Res<super::abilities::Loadout>>,
+    book: Res<MasteryBook>,
+    mut icons: Query<(&SpellIcon, &mut ImageNode, &mut Visibility)>,
+    mut cooldowns: Query<(&SpellCooldown, &mut Node)>,
+    mut levels: Query<(&SpellLevel, &mut Text)>,
+    mut shown: Local<Vec<String>>,
+) {
+    let Some(loadout) = loadout else { return };
+    let ids: Vec<String> = loadout.0.iter().map(|s| s.spec.id.to_string()).collect();
+    if *shown != ids {
+        for (icon, mut image, mut vis) in &mut icons {
+            match loadout.0.get(icon.0).and_then(|s| book.active(s.spec.id)).and_then(|(_, _, a)| a.icon.as_deref()) {
+                Some(path) => {
+                    image.image = assets.load(super::mastery_data::texture(path));
+                    *vis = Visibility::Inherited;
+                }
+                None => *vis = Visibility::Hidden,
+            }
+        }
+        *shown = ids;
+    }
+    for (cd, mut node) in &mut cooldowns {
+        let left = loadout.0.get(cd.0).map_or(0.0, |s| s.cooldown_left());
+        node.height = Val::Percent(left * 100.0 * (SPELL_SLOT - 8.0) / SPELL_SLOT);
+    }
+    for (lvl, mut text) in &mut levels {
+        let want = loadout.0.get(lvl.0).map_or(String::new(), |s| s.level.to_string());
+        if text.0 != want {
+            text.0 = want;
+        }
     }
 }
 
@@ -190,7 +270,7 @@ fn panel(marker: impl Component) -> impl Bundle {
             row_gap: Val::Px(12.0),
             ..default()
         },
-        BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.5)),
+        BackgroundColor(Color::srgba(0.05, 0.035, 0.02, 0.35)),
         marker,
     )
 }
@@ -199,19 +279,12 @@ fn panel(marker: impl Component) -> impl Bundle {
 fn window(p: &mut ChildSpawnerCommands, assets: &AssetServer, title_font: &TitleFont, title: String, width: f32, body: impl FnOnce(&mut ChildSpawnerCommands)) {
     p.spawn((
         Node { width: Val::Px(width), flex_direction: FlexDirection::Column, align_items: AlignItems::Center, row_gap: Val::Px(10.0), padding: UiRect::new(Val::Px(26.0), Val::Px(26.0), Val::Px(16.0), Val::Px(24.0)), ..default() },
-        sliced(assets, "t_frame_gold_big03", 48.0, Color::WHITE),
     ))
     .with_children(|w| {
-        // The frame's art is inset; the dark fill sits inside it.
-        w.spawn((
-            Node { position_type: PositionType::Absolute, left: Val::Px(14.0), right: Val::Px(14.0), top: Val::Px(14.0), bottom: Val::Px(14.0), ..default() },
-            BackgroundColor(Color::srgba(0.03, 0.03, 0.035, 0.93)),
-            ZIndex(-1),
-        ));
-        w.spawn((Node { padding: UiRect::axes(Val::Px(48.0), Val::Px(10.0)), margin: UiRect::bottom(Val::Px(6.0)), ..default() }, sliced(assets, "t_frame_gold_big02_nameplate01", 24.0, Color::WHITE)))
-            .with_children(|n| {
-                n.spawn((Text::new(title), title_font.at(30.0), TextColor(GOLD)));
-            });
+        // The fill sits inside the frame's art.
+        w.spawn(ui::fill(ui::PANEL_FILL, 12.0));
+        w.spawn(ui::frame(assets, "t_frame_gold_big03", 48.0, Color::WHITE));
+        ui::headline(w, assets, title_font, title, 30.0);
         body(w);
     });
 }
@@ -230,18 +303,26 @@ fn show_level_up(
             w.spawn((Text::new("Choose a blessing (1–3 or click)"), text(18.0), TextColor(TEXT)));
             for (i, choice) in offer.0.iter().enumerate() {
                 let (frame, fw, fh, icon_top, icon) = if choice.is_skill() {
-                    ("t_frame_gold_activespell", 60.0, 70.0, 7.0, 42.0)
+                    ("t_frame_gold_activespell", 48.0, 56.0, 6.0, 34.0)
                 } else {
-                    ("t_frame_gold_passivespell", 56.0, 66.0, 11.0, 34.0)
+                    ("t_frame_gold_passivespell", 46.0, 54.0, 9.0, 28.0)
                 };
                 let title_text = choice.title(&loadout);
                 let (head, tail) = title_text.split_once(": ").map_or((title_text.as_str(), ""), |(a, b)| (a, b));
                 w.spawn((
-                    Node { width: Val::Percent(100.0), padding: UiRect::axes(Val::Px(14.0), Val::Px(8.0)), column_gap: Val::Px(14.0), align_items: AlignItems::Center, ..default() },
-                    BackgroundColor(Color::srgba(0.09, 0.08, 0.07, 0.95)),
-                    sliced(&assets, "t_frame_gold_small05", 10.0, Color::WHITE),
+                    Node {
+                        width: Val::Percent(100.0),
+                        min_height: Val::Px(74.0),
+                        flex_shrink: 0.0,
+                        padding: UiRect::axes(Val::Px(16.0), Val::Px(9.0)),
+                        column_gap: Val::Px(14.0),
+                        align_items: AlignItems::Center,
+                        ..default()
+                    },
+                    BackgroundColor(ui::ROW_FILL),
                 ))
                 .with_children(|row| {
+                    row.spawn(ui::frame(&assets, "t_frame_gold_small05", 10.0, Color::WHITE));
                     row.spawn((Text::new(format!("{}", i + 1)), title.at(26.0), TextColor(GOLD), Node { width: Val::Px(22.0), ..default() }));
                     row.spawn((Node { width: Val::Px(fw), height: Val::Px(fh), justify_content: JustifyContent::Center, flex_shrink: 0.0, ..default() }, ui::stretched(&assets, frame, Color::WHITE)))
                         .with_children(|f| {
@@ -331,7 +412,7 @@ fn show_end(mut commands: Commands, assets: Res<AssetServer>, run: Res<Run>, rew
                 Text::new(format!("Level {}   ·   Kills {}   ·   Time {:02}:{:02}", run.level, run.kills, run.time as u32 / 60, run.time as u32 % 60)),
                 text(22.0),
             ));
-            w.spawn((Text::new(format!("Active points +{}   ·   Passive points +{}", reward.active, reward.passive)), text(21.0), TextColor(GOLD)));
+            w.spawn((Text::new(format!("Active points +{}   ·   Passive points +{}   ·   Gold +{}", reward.active, reward.passive, reward.gold)), text(21.0), TextColor(GOLD)));
             if !reward.items.is_empty() {
                 w.spawn((Text::new("Items to the stash"), title_font.at(20.0)));
                 for (name, rarity) in &reward.items {

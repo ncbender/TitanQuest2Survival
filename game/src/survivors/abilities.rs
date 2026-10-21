@@ -261,12 +261,19 @@ pub struct Slot {
     pub level: u32,
     pub mods: Vec<Modifier>,
     timer: f32,
+    /// Length of the current cooldown (spell bar).
+    cooldown_len: f32,
 }
 
 impl Slot {
     pub fn new(spec: &'static SkillSpec, name: String, level: u32) -> Self {
         // Stagger the first casts so not everything fires at once.
-        Self { spec, name, level: level.max(1), mods: vec![], timer: 0.5 + fastrand::f32() }
+        Self { spec, name, level: level.max(1), mods: vec![], timer: 0.5 + fastrand::f32(), cooldown_len: 1.5 }
+    }
+
+    /// Part of the cooldown still to wait, 1 = just cast, 0 = ready.
+    pub fn cooldown_left(&self) -> f32 {
+        (self.timer / self.cooldown_len.max(0.01)).clamp(0.0, 1.0)
     }
 
     fn n(&self, e: ModEffect) -> u32 {
@@ -937,6 +944,9 @@ fn cast_skills(
             debug!("cast {} (level {}, {:.0} damage)", slot.name, slot.level, dmg);
         }
         slot.timer = if cast.is_some() { slot.cooldown(&stats) } else { 0.4 };
+        if cast.is_some() {
+            slot.cooldown_len = slot.timer;
+        }
     }
 }
 

@@ -27,6 +27,7 @@ impl Plugin for CharacterPlugin {
                     merge_parts,
                     bind_players,
                     drive_animation,
+                    blend_base,
                     drive_upper_body,
                     reattach,
                     attach_to_bones,
@@ -341,29 +342,89 @@ fn bind_players(
     }
 }
 
+/// Seconds over which a new base clip (idle, run, attack) blends in and the old one out.
+const BASE_BLEND: f32 = 0.2;
+
+/// Base clips of a player that are blending: the new one in, the replaced ones out.
+#[derive(Component, Default)]
+struct BaseBlend {
+    fade_in: Option<(AnimationNodeIndex, f32)>,
+    fade_out: HashMap<AnimationNodeIndex, f32>,
+}
+
 fn drive_animation(
+    mut commands: Commands,
     library: Res<PartLibrary>,
     changed: Query<(Entity, &CharacterAnim), Changed<CharacterAnim>>,
-    mut players: Query<(&PlayerOf, &mut AnimationPlayer)>,
+    mut players: Query<(Entity, &PlayerOf, &mut AnimationPlayer, Option<&mut BaseBlend>)>,
 ) {
     if changed.is_empty() {
         return;
     }
     let wanted: HashMap<Entity, &CharacterAnim> = changed.iter().collect();
-    for (of, mut player) in &mut players {
+    for (entity, of, mut player, blend) in &mut players {
         let Some(anim) = wanted.get(&of.root) else { continue };
         let Some(graph) = library.0.get(&of.path).and_then(|p| p.graph.as_ref()) else { continue };
         let Some(&node) = graph.base.get(anim.clip) else { continue };
-        // Stop the previous base clip but leave a running upper-body action alone.
+        let mut blend = blend.map(|b| std::mem::take(b.into_inner())).unwrap_or_default();
+        // The previous base clip fades out (a running upper-body action is left alone).
         let old: Vec<AnimationNodeIndex> =
-            player.playing_animations().map(|(n, _)| *n).filter(|n| !graph.durations.contains_key(n)).collect();
+            player.playing_animations().map(|(n, _)| *n).filter(|n| !graph.durations.contains_key(n) && *n != node).collect();
+        let first = old.is_empty() && !player.is_playing_animation(node);
         for n in old {
-            player.stop(n);
+            blend.fade_out.entry(n).or_insert(BASE_BLEND);
         }
+        blend.fade_out.remove(&node);
         let active = player.play(node);
         active.set_speed(anim.speed);
         if anim.repeat {
             active.repeat();
+        } else {
+            active.replay();
+            active.set_repeat(RepeatAnimation::Never);
+        }
+        // The very first clip starts at full weight; later ones blend in.
+        if first {
+            active.set_weight(1.0);
+            blend.fade_in = None;
+        } else {
+            active.set_weight(0.0);
+            blend.fade_in = Some((node, 0.0));
+        }
+        commands.entity(entity).insert(blend);
+    }
+}
+
+/// Crossfades base clips (see `BaseBlend`).
+fn blend_base(mut commands: Commands, time: Res<Time>, mut players: Query<(Entity, &mut AnimationPlayer, &mut BaseBlend)>) {
+    let dt = time.delta_secs();
+    for (entity, mut player, mut blend) in &mut players {
+        if let Some((node, t)) = blend.fade_in.as_mut() {
+            *t += dt;
+            let w = (*t / BASE_BLEND).min(1.0);
+            if let Some(active) = player.animation_mut(*node) {
+                active.set_weight(w);
+            }
+            if w >= 1.0 {
+                blend.fade_in = None;
+            }
+        }
+        let mut done = vec![];
+        for (node, left) in blend.fade_out.iter_mut() {
+            *left -= dt;
+            match player.animation_mut(*node) {
+                Some(active) if *left > 0.0 => {
+                    active.set_weight(*left / BASE_BLEND);
+                }
+                _ => done.push(*node),
+            }
+        }
+        for node in done {
+            player.stop(node);
+            blend.fade_out.remove(&node);
+        }
+        if blend.fade_in.is_none() && blend.fade_out.is_empty() {
+            commands.entity(entity).remove::<BaseBlend>();
         }
     }
 }

@@ -127,8 +127,8 @@ fn show(mut commands: Commands, assets: Res<AssetServer>, title: Res<TitleFont>,
         return;
     }
     commands.spawn((backdrop(&assets, SettingsUi), GlobalZIndex(20))).with_children(|root| {
-        root.spawn((Text::new("Settings"), title.at(40.0)));
-        root.spawn(panel(&assets, Node { width: Val::Px(620.0), flex_direction: FlexDirection::Column, row_gap: Val::Px(12.0), ..default() })).with_children(|p| {
+        root.spawn((Text::new("Settings"), title.at(40.0), Node { align_self: AlignSelf::Center, margin: UiRect::top(Val::Px(90.0)), ..default() }));
+        root.spawn(panel(&assets, Node { width: Val::Px(620.0), align_self: AlignSelf::Center, flex_direction: FlexDirection::Column, row_gap: Val::Px(12.0), ..default() })).with_children(|p| {
             for (label, field, value) in [("Master volume", Field::Master, settings.master), ("Music", Field::Music, settings.music), ("Effects", Field::Sfx, settings.sfx)] {
                 p.spawn(Node { align_items: AlignItems::Center, column_gap: Val::Px(14.0), ..default() }).with_children(|r| {
                     r.spawn((Text::new(label), text(20.0), Node { width: Val::Px(220.0), ..default() }));
@@ -145,6 +145,6 @@ fn show(mut commands: Commands, assets: Res<AssetServer>, title: Res<TitleFont>,
             }
             p.spawn((Text::new("Saved automatically."), text(15.0), TextColor(TEXT)));
         });
-        root.spawn(button(&assets, "Close", 200.0, true, false)).observe(click(Action::Close));
+        root.spawn((button(&assets, "Close", 200.0, true, false), Node { align_self: AlignSelf::Center, ..default() })).observe(click(Action::Close));
     });
 }

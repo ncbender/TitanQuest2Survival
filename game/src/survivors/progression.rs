@@ -94,7 +94,21 @@ pub enum Choice {
     SkillLevel(usize),
     /// A TQ2 modifier for the skill in this loadout slot.
     Modifier(usize, Modifier),
+    /// A learned skill joins the run (until the spell bar is full).
+    NewSkill(SkillOffer),
 }
+
+/// A learned mastery skill that a level-up can add to the run.
+#[derive(Clone)]
+pub struct SkillOffer {
+    pub id: String,
+    pub name: String,
+    pub level: u32,
+}
+
+/// The hero's learned, playable skills for this run (filled at run start).
+#[derive(Resource, Default)]
+pub struct SkillPool(pub Vec<SkillOffer>);
 
 /// Skill levels reachable in a run.
 const MAX_RUN_SKILL_LEVEL: u32 = 10;
@@ -111,6 +125,7 @@ impl Choice {
                 let effects: Vec<&str> = m.effects.iter().map(|e| e.text()).collect();
                 format!("{} – {}: {}", loadout.0[*i].name, m.name, effects.join(", "))
             }
+            Choice::NewSkill(s) => format!("New skill – {}: level {}, casts by itself", s.name, s.level),
         }
     }
 
@@ -135,6 +150,7 @@ impl Choice {
                 let s = skill(i)?;
                 book.modifiers(s).find(|x| x.name == m.name).and_then(|x| x.icon.as_deref()).or(s.icon.as_deref()).map(texture)
             }
+            Choice::NewSkill(s) => book.active(&s.id).and_then(|(_, _, a)| a.icon.as_deref()).map(texture),
         }
     }
 
@@ -148,6 +164,11 @@ impl Choice {
             Choice::Stat(u) => u.apply(stats, hp),
             Choice::SkillLevel(i) => loadout.0[*i].level += 1,
             Choice::Modifier(i, m) => loadout.0[*i].mods.push(m.clone()),
+            Choice::NewSkill(s) => {
+                if let Some(spec) = super::abilities::spec(&s.id) {
+                    loadout.0.push(super::abilities::Slot::new(spec, s.name.clone(), s.level));
+                }
+            }
         }
     }
 }
@@ -163,6 +184,7 @@ pub fn xp_for_level(level: u32) -> u32 {
 
 pub fn plugin(app: &mut App) {
     app.init_resource::<Offer>()
+        .init_resource::<SkillPool>()
         .add_systems(FixedUpdate, (tick_time, collect_shards).run_if(in_state(GameState::Playing)))
         .add_systems(Update, spin_shards)
         .add_systems(OnEnter(GameState::LevelUp), make_offer);
@@ -207,7 +229,24 @@ fn collect_shards(
 
 /// Rolls the three choices; the level-up panel must run after this (see hud.rs). With mastery
 /// skills in the loadout, at least one choice improves a skill (a level or a TQ2 modifier).
-pub fn make_offer(mut offer: ResMut<Offer>, stats: Res<HeroStats>, run: Res<Run>, loadout: Res<Loadout>, book: Res<MasteryBook>) {
+pub fn make_offer(mut offer: ResMut<Offer>, stats: Res<HeroStats>, run: Res<Run>, loadout: Res<Loadout>, book: Res<MasteryBook>, pool: Res<SkillPool>) {
+    // Until the spell bar is full, every level-up offers new skills from the learned ones.
+    if loadout.0.len() < super::skills::MAX_EQUIPPED {
+        let mut fresh: Vec<Choice> =
+            pool.0.iter().filter(|s| !loadout.0.iter().any(|l| l.spec.id == s.id)).cloned().map(Choice::NewSkill).collect();
+        if !fresh.is_empty() {
+            fastrand::shuffle(&mut fresh);
+            fresh.truncate(3);
+            // Fewer than three new skills: the rest are general bonuses.
+            let mut stats_pool: Vec<Choice> = Upgrade::ALL.into_iter().filter(|u| u.available(&stats)).map(Choice::Stat).collect();
+            fastrand::shuffle(&mut stats_pool);
+            let missing = 3 - fresh.len();
+            fresh.extend(stats_pool.into_iter().take(missing));
+            info!("level {} offer (new skills): {:?}", run.level, fresh.iter().map(|c| c.title(&loadout)).collect::<Vec<_>>());
+            offer.0 = fresh;
+            return;
+        }
+    }
     let mut stat_pool: Vec<Choice> = Upgrade::ALL.into_iter().filter(|u| u.available(&stats)).map(Choice::Stat).collect();
     let mut skill_pool: Vec<Choice> = vec![];
     for (i, slot) in loadout.0.iter().enumerate() {

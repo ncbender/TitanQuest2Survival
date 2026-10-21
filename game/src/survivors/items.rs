@@ -228,6 +228,9 @@ pub struct ItemInstance {
     /// Roll on the base value (weapon damage, armour), 0.9..1.1.
     pub quality: f32,
     pub affixes: Vec<RolledAffix>,
+    /// Upgrade level from the anvil (inventory): +5 % to every stat per level.
+    #[serde(default)]
+    pub level: u8,
 }
 
 /// Slot key of an item for TQ2's affix weights.
@@ -242,7 +245,7 @@ fn slot_key(item: Item) -> &'static str {
 impl ItemInstance {
     /// A plain common copy (starting gear).
     pub fn plain(uid: u64, item: Item) -> Self {
-        Self { uid, base: item.id().into(), rarity: Rarity::Common, quality: 1.0, affixes: vec![] }
+        Self { uid, base: item.id().into(), rarity: Rarity::Common, quality: 1.0, affixes: vec![], level: 0 }
     }
 
     /// Rolls a random item of `rarity`.
@@ -269,11 +272,32 @@ impl ItemInstance {
             }
         }
         let quality = 0.9 + fastrand::f32() * 0.2 + rarity.base_bonus();
-        Self { uid, base: item.id().into(), rarity, quality, affixes }
+        Self { uid, base: item.id().into(), rarity, quality, affixes, level: 0 }
     }
 
     pub fn item(&self) -> Option<Item> {
         Item::from_id(&self.base)
+    }
+
+    /// Multiplier of all stats from upgrades.
+    pub fn power(&self) -> f32 {
+        1.0 + UPGRADE_STEP * self.level as f32
+    }
+
+    /// Base value roll including upgrades.
+    pub fn effective_quality(&self) -> f32 {
+        self.quality * self.power()
+    }
+
+    /// Gold for the next upgrade (None at the maximum).
+    pub fn upgrade_cost(&self) -> Option<u32> {
+        (self.level < MAX_UPGRADE).then(|| (40.0 * (1.0 + self.rarity as u32 as f32 * 0.6) * 1.5f32.powi(self.level as i32)).round() as u32)
+    }
+
+    /// Gold for recycling the item.
+    pub fn salvage_value(&self) -> u32 {
+        let base = [8.0, 20.0, 45.0, 100.0, 220.0][self.rarity as usize];
+        (base * (1.0 + 0.5 * self.level as f32)).round() as u32
     }
 
     /// TQ2-style name: "<Prefix> <Base> <Suffix>" with the affixes' tier names.
@@ -291,7 +315,7 @@ impl ItemInstance {
             .iter()
             .filter_map(|r| {
                 let a = book.get(&r.id)?;
-                let v = r.value;
+                let v = (r.value * self.power()).round();
                 Some(render(&a.text, &move |_| Some(v)))
             })
             .collect()
@@ -300,10 +324,10 @@ impl ItemInstance {
     /// The base line: damage or armour with the quality roll.
     pub fn base_line(&self) -> String {
         match self.item() {
-            Some(Item::Weapon(w)) => format!("{:.0} damage · every {:.2} s", w.damage * self.quality, w.cooldown),
-            Some(Item::Armor(a)) => format!("{:.0} % less damage taken", a.armor * self.quality * 100.0),
-            Some(Item::Shield(s)) => format!("blocks {:.0} % of damage", s.block * self.quality * 100.0),
-            Some(Item::Talisman(t)) => format!("+{:.0} % skill damage", t.skill_damage * self.quality * 100.0),
+            Some(Item::Weapon(w)) => format!("{:.0} damage · every {:.2} s", w.damage * self.effective_quality(), w.cooldown),
+            Some(Item::Armor(a)) => format!("{:.0} % less damage taken", a.armor * self.effective_quality() * 100.0),
+            Some(Item::Shield(s)) => format!("blocks {:.0} % of damage", s.block * self.effective_quality() * 100.0),
+            Some(Item::Talisman(t)) => format!("+{:.0} % skill damage", t.skill_damage * self.effective_quality() * 100.0),
             None => String::new(),
         }
     }
@@ -312,9 +336,10 @@ impl ItemInstance {
     pub fn add_to(&self, bonus: &mut Bonus, book: &AffixBook) {
         for r in &self.affixes {
             let Some(stat) = book.get(&r.id).and_then(|a| a.stat) else { continue };
-            let v = r.value / 100.0;
+            let value = r.value * self.power();
+            let v = value / 100.0;
             match stat {
-                Stat::FlatDamage => bonus.flat_damage += r.value,
+                Stat::FlatDamage => bonus.flat_damage += value,
                 Stat::WeaponPct => bonus.weapon_pct += v,
                 Stat::SkillPct => bonus.skill_pct += v,
                 Stat::DamagePct => {
@@ -325,14 +350,18 @@ impl ItemInstance {
                 Stat::CastSpeed | Stat::Cooldown => bonus.cast_speed += v,
                 Stat::Crit => bonus.crit += v,
                 Stat::CritMult => bonus.crit_mult += v,
-                Stat::Health => bonus.health += r.value,
+                Stat::Health => bonus.health += value,
                 Stat::Resist => bonus.reduction += v,
                 Stat::Ailment => bonus.ailment += v,
-                Stat::Retaliation => bonus.retaliation += r.value,
+                Stat::Retaliation => bonus.retaliation += value,
             }
         }
     }
 }
+
+/// Stat gain per upgrade level, and the highest level.
+pub const UPGRADE_STEP: f32 = 0.05;
+pub const MAX_UPGRADE: u8 = 10;
 
 /// Sum of the worn items' affixes.
 #[derive(Clone, Copy, Default, Debug)]

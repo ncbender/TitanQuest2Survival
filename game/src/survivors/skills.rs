@@ -16,6 +16,7 @@ pub const TIER_LEVEL: [u32; 5] = [0, 5, 12, 20, 30];
 pub const SECOND_MASTERY_LEVEL: u32 = 8;
 pub const MAX_MASTERIES: usize = 2;
 /// Learned skills that cast themselves during a run.
+/// Skills a hero can carry in one run (the spell bar).
 pub const MAX_EQUIPPED: usize = 4;
 pub const ACTIVE_MAX_LEVEL: u32 = 5;
 
@@ -93,16 +94,13 @@ pub fn passive_blocked(profile: &Profile, book: &MasteryBook, id: &str) -> Optio
     None
 }
 
-/// Learns or raises an active skill; the first skills learned are equipped automatically.
+/// Learns or raises an active skill. Learned skills are offered on level-ups in runs.
 pub fn learn_active(profile: &mut Profile, book: &MasteryBook, id: &str) -> Result<(), String> {
     if let Some(why) = active_blocked(profile, book, id) {
         return Err(why);
     }
     profile.active_points -= 1;
     *profile.actives.entry(id.into()).or_default() += 1;
-    if profile.equipped.len() < MAX_EQUIPPED && !profile.equipped.iter().any(|e| e == id) {
-        profile.equipped.push(id.into());
-    }
     Ok(())
 }
 
@@ -112,22 +110,6 @@ pub fn learn_passive(profile: &mut Profile, book: &MasteryBook, id: &str) -> Res
     }
     profile.passive_points -= 1;
     *profile.passives.entry(id.into()).or_default() += 1;
-    Ok(())
-}
-
-/// Equips a learned skill (or unequips it).
-pub fn toggle_equip(profile: &mut Profile, id: &str) -> Result<(), String> {
-    if let Some(i) = profile.equipped.iter().position(|e| e == id) {
-        profile.equipped.remove(i);
-        return Ok(());
-    }
-    if profile.active_level(id) == 0 {
-        return Err("learn it first".into());
-    }
-    if profile.equipped.len() >= MAX_EQUIPPED {
-        return Err(format!("at most {MAX_EQUIPPED} skills"));
-    }
-    profile.equipped.push(id.into());
     Ok(())
 }
 

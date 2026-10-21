@@ -11,6 +11,7 @@ mod enemies;
 mod equipment;
 mod flowfield;
 mod hud;
+mod inventory;
 pub mod items;
 pub mod mastery_data;
 mod mechanics;
@@ -140,7 +141,7 @@ impl Plugin for SurvivorsPlugin {
             .add_message::<StartRun>()
             .add_plugins((camera::plugin, player::plugin, enemies::plugin, combat::plugin, progression::plugin, hud::plugin))
             .add_plugins((menu::plugin, bench::plugin, flowfield::plugin, equipment::plugin, profile::plugin))
-            .add_plugins((mastery_data::plugin, abilities::plugin, skilltree::plugin, mechanics::plugin))
+            .add_plugins((mastery_data::plugin, abilities::plugin, skilltree::plugin, mechanics::plugin, inventory::plugin))
             .insert_resource(items::AffixBook::load(&crate::export_root()))
             .add_systems(Update, ui::scale_to_window)
             .add_plugins(settings::plugin)
@@ -202,7 +203,9 @@ fn start_run(
     }
     let mut hp = Health { hp: config::PLAYER_HP, max: config::PLAYER_HP };
     skills::apply(&profile, &book, &mut stats, &mut hp);
-    commands.insert_resource(run_loadout(&profile, &book));
+    let (loadout, pool) = run_loadout(&profile, &book);
+    commands.insert_resource(loadout);
+    commands.insert_resource(pool);
     let mut gear = profile.equipment(&affixes);
     items::apply(&gear, &mut stats, &mut hp);
     // Test hook: TQ2_TEST_CHEST=1 drops a chest right next to the hero.
@@ -252,9 +255,9 @@ fn start_run(
     }
 }
 
-/// The run's skills: the profile's equipped skills, or TQ2_TEST_SKILLS=Ice Shards,Fissure,…
-/// (TQ2 skill names, for tests) regardless of the profile.
-fn run_loadout(profile: &profile::Profile, book: &mastery_data::MasteryBook) -> abilities::Loadout {
+/// The run's skills: none at the start, the learned ones are offered on level-ups (the pool).
+/// TQ2_TEST_SKILLS=Ice Shards,Fissure,… (TQ2 skill names, for tests) starts with those instead.
+fn run_loadout(profile: &profile::Profile, book: &mastery_data::MasteryBook) -> (abilities::Loadout, progression::SkillPool) {
     let mut slots = vec![];
     let test: Option<Vec<String>> = std::env::var("TQ2_TEST_SKILLS").ok().map(|s| s.split(',').map(|n| n.trim().to_ascii_lowercase()).collect());
     let wanted: Vec<(String, u32)> = match &test {
@@ -265,8 +268,14 @@ fn run_loadout(profile: &profile::Profile, book: &mastery_data::MasteryBook) -> 
             .filter(|a| !a.wip && names.contains(&a.name.to_ascii_lowercase()))
             .map(|a| (a.id.clone(), 1))
             .collect(),
-        None => profile.equipped.iter().map(|id| (id.clone(), profile.active_level(id))).collect(),
+        None => vec![],
     };
+    let pool = profile
+        .actives
+        .iter()
+        .filter(|(id, lvl)| **lvl > 0 && abilities::spec(id).is_some())
+        .filter_map(|(id, lvl)| book.active(id).map(|(_, _, info)| progression::SkillOffer { id: id.clone(), name: info.name.clone(), level: *lvl }))
+        .collect();
     for (id, level) in wanted {
         match (abilities::spec(&id), book.active(&id)) {
             (Some(spec), Some((_, _, info))) => slots.push(abilities::Slot::new(spec, info.name.clone(), level)),
@@ -274,7 +283,7 @@ fn run_loadout(profile: &profile::Profile, book: &mastery_data::MasteryBook) -> 
         }
     }
     info!("run skills: {:?}", slots.iter().map(|s| format!("{} {}", s.name, s.level)).collect::<Vec<_>>());
-    abilities::Loadout(slots)
+    (abilities::Loadout(slots), progression::SkillPool(pool))
 }
 
 /// Short names for TQ2_TEST_GEAR.
@@ -331,7 +340,19 @@ fn follow_ground(
             f.time -= dt;
             (f.time > 0.0).then_some(f.dir)
         });
-        if let Some(dir) = attack.or(vel.map(|v| v.0)).filter(|d| d.length_squared() > 1e-6) {
+        let moving = vel.map(|v| v.0).filter(|v| v.length_squared() > 0.1);
+        // Running units keep facing where they run; an attack turns them at most 50° towards
+        // the target (the legs cannot strafe, and turning further makes the body flip back
+        // and forth with every swing).
+        let dir = match (attack, moving) {
+            (Some(aim), Some(run)) => {
+                let angle = run.angle_to(aim).clamp(-0.87, 0.87);
+                Some(Vec2::from_angle(angle).rotate(run))
+            }
+            (Some(aim), None) => Some(aim),
+            (None, run) => run.or(vel.map(|v| v.0)),
+        };
+        if let Some(dir) = dir.filter(|d| d.length_squared() > 1e-6) {
             // Exported TQ2 characters face +Z (toe bones lie at +Z in the bind pose).
             let target = Quat::from_rotation_y(f32::atan2(dir.x, dir.y));
             t.rotation = t.rotation.slerp(target, (14.0 * dt).min(1.0));
