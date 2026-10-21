@@ -2,9 +2,9 @@
 use bevy::prelude::*;
 
 use super::camera::CameraRig;
-use super::content::{HERO_IDLE, HERO_PARTS, HERO_RUN};
+use super::content::{HERO_IDLE, HERO_PARTS, HERO_RUN, HERO_WEAPON, HERO_WEAPON_BONE};
 use super::{config, GameState, Health, Pos, Radius, RunEntity, Vel};
-use crate::character::{attach_parts, CharacterAnim};
+use crate::character::{attach_parts, Attachment, CharacterAnim};
 use crate::ground::Ground;
 use crate::obstacles::Obstacles;
 
@@ -49,6 +49,8 @@ pub fn spawn_hero(commands: &mut Commands, at: Vec2) {
             Radius(HERO_RADIUS),
             Health { hp: config::PLAYER_HP, max: config::PLAYER_HP },
             CharacterAnim::looping(HERO_IDLE),
+            // The staff's head points along its +Y; on HandAttach_R that axis faces down.
+            Attachment { bone: HERO_WEAPON_BONE, scene: HERO_WEAPON, rotation: Quat::from_rotation_x(std::f32::consts::PI) },
             Transform::default(),
             Visibility::default(),
         ))

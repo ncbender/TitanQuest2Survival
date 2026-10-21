@@ -15,7 +15,7 @@ pub struct CharacterPlugin;
 impl Plugin for CharacterPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<PartLibrary>()
-            .add_systems(Update, (instantiate_parts, merge_parts, bind_players, drive_animation).chain());
+            .add_systems(Update, (instantiate_parts, merge_parts, bind_players, drive_animation, attach_to_bones).chain());
     }
 }
 
@@ -34,6 +34,16 @@ impl CharacterAnim {
     pub fn once(clip: &'static str) -> Self {
         Self { clip, repeat: false, speed: 1.0 }
     }
+}
+
+/// A static mesh (weapon, prop) carried on one of the character's bones, e.g. a staff on
+/// `HandAttach_R`. TQ2 weapon meshes are modelled around their grip, so only a rotation
+/// relative to the bone is needed.
+#[derive(Component)]
+pub struct Attachment {
+    pub bone: &'static str,
+    pub scene: &'static str,
+    pub rotation: Quat,
 }
 
 /// A part glb waiting for its asset before the scene is spawned; index 0 is the body.
@@ -200,5 +210,30 @@ fn drive_animation(
         if anim.repeat {
             active.repeat();
         }
+    }
+}
+
+fn attach_to_bones(
+    mut commands: Commands,
+    assets: Res<AssetServer>,
+    pending: Query<(Entity, &Attachment, &Children)>,
+    parts: Query<&CharacterPart>,
+    children: Query<&Children>,
+    names: Query<&Name>,
+) {
+    for (root, attachment, root_children) in &pending {
+        // Only the body keeps its bones after merging, so look there.
+        let Some(body) = root_children.iter().find(|c| parts.get(*c).is_ok_and(|p| p.index == 0)) else { continue };
+        let Some(bone) = children.iter_descendants(body).find(|e| names.get(*e).is_ok_and(|n| n.as_str() == attachment.bone)) else {
+            continue;
+        };
+        let mesh = commands
+            .spawn((
+                WorldAssetRoot(assets.load(GltfAssetLabel::Scene(0).from_asset(attachment.scene))),
+                Transform::from_rotation(attachment.rotation),
+            ))
+            .id();
+        commands.entity(bone).add_child(mesh);
+        commands.entity(root).remove::<Attachment>();
     }
 }

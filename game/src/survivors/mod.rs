@@ -24,6 +24,10 @@ pub mod content {
     ];
     pub const HERO_IDLE: &str = "a_male_staff2h_idle_combat_01";
     pub const HERO_RUN: &str = "a_male_staff2h_run_01";
+    /// Staff of Apollo (TQ2 unique staff) in the hero's right hand.
+    pub const HERO_WEAPON: &str =
+        "weapons/TQ2/Content/TQ2/Character/Human/Weapon/Staff2H/Unique/Staff2H_Staff_Of_Apollo_01/sm_staff2h_staff_of_apollo_01.glb";
+    pub const HERO_WEAPON_BONE: &str = "HandAttach_R";
 
     pub const BOLT: &str = "props/TQ2/Content/TQ2/Character/Abilities/Forge_Sentry_01/sm_forge_sentry_projectile_01.glb";
     pub const SHARD: &str = "props/TQ2/Content/TQ2/Character/Crafting/In_World/Mystical_Shards/sm_mystic_shards.glb";
@@ -32,7 +36,7 @@ pub mod content {
     pub const NOVA_RING_RADIUS: f32 = 0.16;
 
     /// Export folders whose materials.json the game loads.
-    pub const MATERIAL_DIRS: &[&str] = &["hero", "boarman", "spider", "giant_boar", "skeleton", "harpy", "cyclops", "props"];
+    pub const MATERIAL_DIRS: &[&str] = &["hero", "boarman", "spider", "giant_boar", "skeleton", "harpy", "cyclops", "props", "weapons"];
 }
 
 /// Tunables for a run. Kept in one place so balancing does not mean hunting through systems.
