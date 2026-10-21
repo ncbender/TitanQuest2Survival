@@ -26,6 +26,14 @@ changed), builds and starts the game. Run it again for every update. `-NoStart` 
 `-Assets` forces a fresh extraction. Your save (`save/`) and the extracted data (`cache/`) stay
 local and are never uploaded.
 
+## Without Rust (prebuilt game)
+
+Download the latest `tq2-survivors-<version>.zip` from the repository's Releases page and unpack
+it into the repository folder (it holds `game/target/release/tq2_survivors.exe` and
+`cache/natives/CUE4Parse-Natives.dll`). Then only Git and the .NET 10 SDK are needed:
+`update.ps1` skips building and starts the prebuilt game. Unpack each new release to update the
+game; the asset extraction still comes from your own TQ2 install.
+
 ## One-time setup (manual)
 
 All commands from PowerShell in the repository root.

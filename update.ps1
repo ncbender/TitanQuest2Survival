@@ -14,7 +14,12 @@ function Need($cmd, $hint) {
 }
 Need git "Install Git for Windows: https://git-scm.com/download/win"
 Need dotnet "Install the .NET 10 SDK: https://dotnet.microsoft.com/download"
-Need cargo "Install Rust: https://rustup.rs (default MSVC toolchain)"
+# Without Rust the prebuilt game from the GitHub release is used (see README).
+$exe = Join-Path $root "game\target\release\tq2_survivors.exe"
+$prebuilt = -not (Get-Command cargo -ErrorAction SilentlyContinue)
+if ($prebuilt -and -not (Test-Path $exe)) {
+    throw "Rust is not installed and no prebuilt game found. Unpack the latest release zip into this folder (see README) or install Rust: https://rustup.rs"
+}
 
 Write-Host "== Pulling the latest version" -ForegroundColor Yellow
 git pull --ff-only
@@ -50,13 +55,18 @@ if ($Assets -or $toolsRev -ne $done) {
     Write-Host "== Assets are up to date"
 }
 
-Write-Host "== Building the game" -ForegroundColor Yellow
 Push-Location game
-cargo build --release
-$ok = $LASTEXITCODE -eq 0
+if ($prebuilt) {
+    Write-Host "== Using the prebuilt game (no Rust installed); unpack each new release zip to update it" -ForegroundColor Yellow
+    $ok = $true
+} else {
+    Write-Host "== Building the game" -ForegroundColor Yellow
+    cargo build --release
+    $ok = $LASTEXITCODE -eq 0
+}
 if ($ok -and -not $NoStart) {
     Write-Host "== Starting" -ForegroundColor Green
-    cargo run --release
+    & $exe
 }
 Pop-Location
 if (-not $ok) { throw "build failed" }

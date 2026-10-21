@@ -12,3 +12,4 @@
 !docs/**/*.png
 __pycache__/
 /save/
+/release/
