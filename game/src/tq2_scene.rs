@@ -33,6 +33,10 @@ struct Shape {
     radius: f32,
 }
 
+/// Root of a placed map mesh (as opposed to characters, projectiles, …).
+#[derive(Component)]
+pub struct MapProp;
+
 pub struct SceneInfo {
     /// Median placement origin (robust against far-away outliers).
     pub center: Vec3,
@@ -58,6 +62,7 @@ pub fn spawn_scene(commands: &mut Commands, assets: &AssetServer, export_root: &
         let t = Vec3::from_array(inst.t);
         commands.spawn((
             WorldAssetRoot(scene),
+            MapProp,
             Transform {
                 translation: t,
                 rotation: Quat::from_array(inst.r).normalize(),

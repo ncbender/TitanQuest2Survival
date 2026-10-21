@@ -3,6 +3,7 @@ use bevy::input::mouse::MouseWheel;
 use bevy::prelude::*;
 
 use super::player::Hero;
+use crate::tq2_scene::MapProp;
 
 #[derive(Component)]
 pub struct CameraRig {
@@ -13,7 +14,9 @@ pub struct CameraRig {
 }
 
 pub fn plugin(app: &mut App) {
-    app.add_systems(Startup, spawn_camera).add_systems(PostUpdate, follow.before(TransformSystems::Propagate));
+    app.add_systems(Startup, spawn_camera)
+        .add_systems(Update, tag_occluders)
+        .add_systems(PostUpdate, (follow.before(TransformSystems::Propagate), hide_occluders.after(TransformSystems::Propagate)));
 }
 
 fn spawn_camera(mut commands: Commands) {
@@ -54,4 +57,49 @@ fn follow(
     }
     let offset = Vec3::new(rig.yaw.sin() * rig.pitch.cos(), rig.pitch.sin(), rig.yaw.cos() * rig.pitch.cos()) * rig.distance;
     *t = Transform::from_translation(rig.focus + offset).looking_at(rig.focus, Vec3::Y);
+}
+
+/// A map mesh that may hide the hero from the camera.
+#[derive(Component)]
+struct Occluder;
+
+fn tag_occluders(
+    mut commands: Commands,
+    meshes: Query<Entity, Added<Mesh3d>>,
+    parents: Query<&ChildOf>,
+    props: Query<(), With<MapProp>>,
+) {
+    for e in &meshes {
+        if parents.iter_ancestors(e).any(|a| props.contains(a)) {
+            commands.entity(e).insert(Occluder);
+        }
+    }
+}
+
+/// Hides map meshes that stand between the camera and the hero (rocks, trees, walls),
+/// so the isometric view never loses the hero behind tall scenery.
+fn hide_occluders(
+    cam: Query<&GlobalTransform, With<CameraRig>>,
+    hero: Query<&GlobalTransform, (With<Hero>, Without<CameraRig>)>,
+    mut occluders: Query<(&bevy::camera::primitives::Aabb, &GlobalTransform, &mut Visibility), With<Occluder>>,
+) {
+    let (Ok(cam), Ok(hero)) = (cam.single(), hero.single()) else { return };
+    let from = cam.translation();
+    let to = hero.translation() + Vec3::Y * 1.0;
+    let ray = to - from;
+    let len2 = ray.length_squared().max(1e-6);
+    for (aabb, transform, mut visibility) in &mut occluders {
+        let center = transform.transform_point(Vec3::from(aabb.center));
+        let radius = (Vec3::from(aabb.half_extents) * transform.scale()).length();
+        // Landscape and other huge meshes are never hidden.
+        let t = (center - from).dot(ray) / len2;
+        let blocking = radius < 25.0
+            && (0.05..0.97).contains(&t)
+            && center.distance(from + ray * t) < radius * 0.75 + 0.6
+            && center.y + radius * 0.5 > to.y;
+        let wanted = if blocking { Visibility::Hidden } else { Visibility::Inherited };
+        if *visibility != wanted {
+            *visibility = wanted;
+        }
+    }
 }
