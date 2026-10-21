@@ -130,6 +130,128 @@
       "anims": [
         "TQ2/Content/TQ2/Character/Cyclops/Cyclops_01/Animation"
       ]
+    },
+    "wolf": {
+      "parts": [
+        "TQ2/Content/TQ2/Character/Wildlife/Wolf_01/sk_wolf_01.uasset"
+      ],
+      "skeleton": "TQ2/Content/TQ2/Character/Wildlife/Wolf_01/skel_wolf_01.uasset",
+      "anims": [
+        "TQ2/Content/TQ2/Character/Wildlife/Wolf_01/Animation"
+      ],
+      "clips": [
+        "a_wolf_run_01",
+        "a_wolf_attack_01"
+      ]
+    },
+    "scorpion": {
+      "parts": [
+        "TQ2/Content/TQ2/Character/Wildlife/Scorpion_01/sk_scorpion_01.uasset"
+      ],
+      "skeleton": "TQ2/Content/TQ2/Character/Wildlife/Scorpion_01/skel_scorpion_01.uasset",
+      "anims": [
+        "TQ2/Content/TQ2/Character/Wildlife/Scorpion_01/Animation"
+      ],
+      "clips": [
+        "a_scorpion_run_01",
+        "a_scorpion_aa_quick_claw_left_01",
+        "a_scorpion_ambush_spawn_01"
+      ]
+    },
+    "giant_bat": {
+      "parts": [
+        "TQ2/Content/TQ2/Character/Wildlife/Giant_Bat_01/sk_giant_bat_01.uasset"
+      ],
+      "skeleton": "TQ2/Content/TQ2/Character/Wildlife/Giant_Bat_01/skel_giant_bat_01.uasset",
+      "anims": [
+        "TQ2/Content/TQ2/Character/Wildlife/Giant_Bat_01/Animation"
+      ],
+      "clips": [
+        "a_giant_bat_01_walk",
+        "a_giant_bat_01_regular_attack_01"
+      ]
+    },
+    "crab": {
+      "parts": [
+        "TQ2/Content/TQ2/Character/Wildlife/Crab_01/sk_crab_01_01.uasset"
+      ],
+      "skeleton": "TQ2/Content/TQ2/Character/Wildlife/Crab_01/skel_crab_01.uasset",
+      "anims": [
+        "TQ2/Content/TQ2/Character/Wildlife/Crab_01/Animation"
+      ],
+      "clips": [
+        "a_crab_run_fwd_01",
+        "a_crab_attack_01",
+        "a_crab_spawn_01"
+      ]
+    },
+    "lion": {
+      "parts": [
+        "TQ2/Content/TQ2/Character/Wildlife/Lion_01/sk_lion_01_body.uasset",
+        "TQ2/Content/TQ2/Character/Wildlife/Lion_01/sk_lion_01_mane_01.uasset"
+      ],
+      "skeleton": "TQ2/Content/TQ2/Character/Wildlife/Lion_01/skel_lion_01_body.uasset",
+      "anims": [
+        "TQ2/Content/TQ2/Character/Wildlife/Lion_01/Animation"
+      ],
+      "clips": [
+        "a_lion_run_01",
+        "a_lion_attack_02"
+      ]
+    },
+    "crocolisk": {
+      "parts": [
+        "TQ2/Content/TQ2/Character/Wildlife/Crocolisk_01/sk_crocolisk_01.uasset"
+      ],
+      "skeleton": "TQ2/Content/TQ2/Character/Wildlife/Crocolisk_01/skel_crocolisk_01.uasset",
+      "anims": [
+        "TQ2/Content/TQ2/Character/Wildlife/Crocolisk_01/Animation"
+      ],
+      "clips": [
+        "a_crocolisk_run_01",
+        "a_crocolisk_attack_01"
+      ]
+    },
+    "boarman_mage": {
+      "parts": [
+        "TQ2/Content/TQ2/Character/Boarman/Boarman_Mage/sk_boarman_mage_01.uasset",
+        "TQ2/Content/TQ2/Character/Boarman/Boarman_Mage/sk_boarman_mage_beard_01.uasset",
+        "TQ2/Content/TQ2/Character/Boarman/Boarman_Mage/sk_boarman_mage_mane_01.uasset"
+      ],
+      "skeleton": "TQ2/Content/TQ2/Character/Boarman/Boarman_Mage/skel_boarman_mage_01.uasset",
+      "anims": [
+        "TQ2/Content/TQ2/Character/Boarman/Boarman_Mage/Animation"
+      ],
+      "clips": [
+        "a_boarman_staff_2h_run_01",
+        "a_boarman_staff_2h_attack_01"
+      ]
+    },
+    "lich": {
+      "parts": [
+        "TQ2/Content/TQ2/Character/Undead/Lich_02/sk_lich_02.uasset"
+      ],
+      "skeleton": "TQ2/Content/TQ2/Character/Undead/Lich_02/skel_lich_02.uasset",
+      "anims": [
+        "TQ2/Content/TQ2/Character/Undead/Lich_02/Animation"
+      ],
+      "clips": [
+        "a_lich_02_run_01",
+        "a_lich_02_attack_staff_01"
+      ]
+    },
+    "lich_lord": {
+      "parts": [
+        "TQ2/Content/TQ2/Character/Undead/Lich_03/sk_lich_03.uasset"
+      ],
+      "skeleton": "TQ2/Content/TQ2/Character/Undead/Lich_03/skel_lich_03.uasset",
+      "anims": [
+        "TQ2/Content/TQ2/Character/Undead/Lich_03/Animation"
+      ],
+      "clips": [
+        "a_lich_03_run_01",
+        "a_lich_03_attack_01"
+      ]
     }
   },
   "props": {
@@ -150,7 +272,31 @@
       "TQ2/Content/TQ2/Character/Human/Weapon/Talisman1H/Unique/Talisman1H_Arcane_Mirror_01/sk_talisman1h_arcane_mirror_01.uasset",
       "TQ2/Content/TQ2/Character/Human/Weapon/Staff2H/Unique/Staff2H_Fotia_01/sm_staff2h_fotia_01.uasset",
       "TQ2/Content/TQ2/Character/Human/Weapon/Axe2H/Unique/Axe2H_Harpe_01/sm_axe2h_harpe_01.uasset",
-      "TQ2/Content/TQ2/Character/Human/Weapon/Shield1h/Unique/Shield1H_Shield_Of_Aeneas_01/sm_shield1h_shield_of_aeneas_01.uasset"
+      "TQ2/Content/TQ2/Character/Human/Weapon/Shield1h/Unique/Shield1H_Shield_Of_Aeneas_01/sm_shield1h_shield_of_aeneas_01.uasset",
+      "TQ2/Content/TQ2/Character/Human/Weapon/Staff2H/Unique/Staff2H_Chromatic_Staff_01/sm_staff2h_chromatic_staff_01.uasset",
+      "TQ2/Content/TQ2/Character/Human/Weapon/Staff2H/Unique/Staff2H_Grace_Of_Eos_01/sm_staff2h_grace_of_eos_01.uasset",
+      "TQ2/Content/TQ2/Character/Human/Weapon/Staff2H/Unique/Staff2H_Hades_Scepter_01/sm_staff2h_hades_scepter_01.uasset",
+      "TQ2/Content/TQ2/Character/Human/Weapon/Staff2H/Unique/Staff2H_Ilektrismos_01/sm_staff2h_ilektrismos_01.uasset",
+      "TQ2/Content/TQ2/Character/Human/Weapon/Bow2H/Unique/Bow2H_Barrage_Wide_01/sk_bow2h_barrage_wide_01.uasset",
+      "TQ2/Content/TQ2/Character/Human/Weapon/Bow2H/Unique/Bow2H_Bow_Of_Eurytus_Narrow_01/sk_bow2h_bow_of_eurytus_narrow_01.uasset",
+      "TQ2/Content/TQ2/Character/Human/Weapon/Bow2H/Unique/Bow2H_Spectral_Warbow_Narrow_01/sk_bow2h_spectral_warbow_narrow_01.uasset",
+      "TQ2/Content/TQ2/Character/Human/Weapon/Bow2H/Unique/Bow2H_Teucers_Warbow_Narrow_01/sk_bow2h_teucers_warbow_narrow_01.uasset",
+      "TQ2/Content/TQ2/Character/Human/Weapon/Axe2H/Unique/Axe2H_Bonehack_01/sm_axe2h_bonehack_01.uasset",
+      "TQ2/Content/TQ2/Character/Human/Weapon/Axe2H/Unique/Axe2H_Hydra_Fang_01/sm_axe2h_hydra_fang_01.uasset",
+      "TQ2/Content/TQ2/Character/Human/Weapon/Axe2H/Unique/Axe2H_Megalos_01/sm_axe2h_megalos_01.uasset",
+      "TQ2/Content/TQ2/Character/Human/Weapon/Axe2H/Unique/Axe2H_Rimescythe_01/sm_axe2h_rimescythe_01.uasset",
+      "TQ2/Content/TQ2/Character/Human/Weapon/Sword1h/Unique/Sword1H_Atlantean_Sabre_01/sm_sword1h_atlantean_sabre_01.uasset",
+      "TQ2/Content/TQ2/Character/Human/Weapon/Sword1h/Unique/Sword1H_Doxa_Kalo_01/sm_sword1h_doxa_kalo_01.uasset",
+      "TQ2/Content/TQ2/Character/Human/Weapon/Sword1h/Unique/Sword1H_Soul_Carver_01/sm_sword1h_soul_carver_01.uasset",
+      "TQ2/Content/TQ2/Character/Human/Weapon/Sword1h/Unique/Sword1H_Sword_Of_Light_01/sm_sword1h_sword_of_light_01.uasset",
+      "TQ2/Content/TQ2/Character/Human/Weapon/Shield1h/Unique/Shield1H_Aegis_Of_Laconia_01/sm_shield1h_aegis_of_laconia_01.uasset",
+      "TQ2/Content/TQ2/Character/Human/Weapon/Shield1h/Unique/Shield1H_Deimos_01/sm_shield1h_deimos_01.uasset",
+      "TQ2/Content/TQ2/Character/Human/Weapon/Shield1h/Unique/Shield1H_Moon_Disc_01/sm_shield1h_moon_disc_01.uasset",
+      "TQ2/Content/TQ2/Character/Human/Weapon/Shield1h/Unique/Shield1H_Thornwall_01/sm_shield1h_thornwall_01.uasset",
+      "TQ2/Content/TQ2/Character/Human/Weapon/Talisman1H/Unique/Talisman1H_Blood_Gem_01/sk_talisman1h_blood_gem_01.uasset",
+      "TQ2/Content/TQ2/Character/Human/Weapon/Talisman1H/Unique/Talisman1H_Chaos_Cube_01/sk_talisman1h_chaos_cube_01.uasset",
+      "TQ2/Content/TQ2/Character/Human/Weapon/Talisman1H/Unique/Talisman1H_Gorgon_Head_01/sk_talisman1h_gorgon_head_01.uasset",
+      "TQ2/Content/TQ2/Character/Human/Weapon/Talisman1H/Unique/Talisman1H_Molten_Orb_01/sk_talisman1h_molten_orb_01.uasset"
     ]
   },
   "scenes": {
@@ -239,7 +385,48 @@
       "t_icon_weapon_itemicon_weapon_talisman1h_arcane_mirror",
       "t_icon_armor_torso_greek_adventurer_01_battlemage_none",
       "t_icon_armor_torso_greek_scholar_02_01_battlemage_none",
-      "t_icon_armor_torso_greek_ranger_02_battlemage_none"
+      "t_icon_armor_torso_greek_ranger_02_battlemage_none",
+      "t_icon_weapon_weapon_staff2h_chromatic_staff",
+      "t_icon_weapon_weapon_staff2h_grace_of_eos",
+      "t_icon_weapon_weapon_staff2h_hades_scepter",
+      "t_icon_weapon_weapon_staff2h_ilektrismos",
+      "t_icon_weapon_weapon_bow2h_barrage",
+      "t_icon_weapon_weapon_bow2h_bow_of_eurytus",
+      "t_icon_weapon_weapon_bow2h_spectral_warbow",
+      "t_icon_weapon_weapon_bow2h_teucers_warbow",
+      "t_icon_weapon_weapon_axe2h_bonehack",
+      "t_icon_weapon_weapon_axe2h_hydra_fang",
+      "t_icon_weapon_weapon_axe2h_megalos",
+      "t_icon_weapon_weapon_axe2h_rimescythe",
+      "t_icon_weapon_weapon_sword1h_atlantean_sabre",
+      "t_icon_weapon_weapon_sword1h_doxa_kalo",
+      "t_icon_weapon_weapon_sword1h_soul_carver",
+      "t_icon_weapon_weapon_sword1h_sword_of_light",
+      "t_icon_weapon_itemicon_weapon_shield1h_aegis_of_laconia",
+      "t_icon_weapon_itemicon_weapon_shield1h_deimos",
+      "t_icon_weapon_itemicon_weapon_shield1h_moon_disc",
+      "t_icon_weapon_itemicon_weapon_shield1h_thornwall",
+      "t_icon_weapon_itemicon_weapon_talisman1h_blood_gem",
+      "t_icon_weapon_itemicon_weapon_talisman1h_chaos_cube",
+      "t_icon_weapon_itemicon_weapon_talisman1h_gorgon_head",
+      "t_icon_weapon_itemicon_weapon_talisman1h_molten_orb"
+    ]
+  },
+  "regions": {
+    "forest": [
+      -2040,
+      -360,
+      90
+    ],
+    "graveyard": [
+      -1800,
+      0,
+      90
+    ],
+    "village": [
+      -1680,
+      240,
+      90
     ]
   }
 }

@@ -87,6 +87,7 @@ fn spawn_waves(
     mut commands: Commands,
     time: Res<Time>,
     run: Res<Run>,
+    arena: Res<super::arenas::CurrentArena>,
     ground: Res<Ground>,
     obstacles: Res<Obstacles>,
     mut director: ResMut<Director>,
@@ -103,12 +104,13 @@ fn spawn_waves(
     let interval = (1.6 - t / 200.0).max(0.25);
     let per_wave = 1 + (t / 45.0) as usize;
     let cap = ((30.0 + t * 0.6) as usize).min(config::MAX_ENEMIES);
-    let scale = 1.0 + t / 100.0;
+    let scale = (1.0 + t / 100.0) * arena.0.tier;
 
     if director.bosses_spawned < config::BOSS_TIMES.len() && t >= config::BOSS_TIMES[director.bosses_spawned] {
         director.bosses_spawned += 1;
-        if let Some(p) = ring_point(&ground, &obstacles, hero.0, bestiary::CYCLOPS.radius) {
-            spawn_enemy(&mut commands, &bestiary::CYCLOPS, p, scale, false);
+        let boss = arena.0.boss;
+        if let Some(p) = ring_point(&ground, &obstacles, hero.0, boss.radius) {
+            spawn_enemy(&mut commands, boss, p, scale, false, true);
             audio.play(super::content::sound::BOSS_ARRIVES, None, 1.0, 0.0);
         }
     }
@@ -120,7 +122,7 @@ fn spawn_waves(
     director.spawn_timer = interval;
     let alive = enemies.iter().count();
     for i in 0..per_wave.min(cap.saturating_sub(alive)) {
-        let def = bestiary::pick(t);
+        let def = bestiary::pick(arena.0.roster, t);
         let Some(p) = ring_point(&ground, &obstacles, hero.0, def.radius) else { continue };
         // A guaranteed first elite (and so a chest) at 30 s, then every 15th spawn after a minute.
         let elite = (t > 30.0 && !director.first_elite) || (t > 60.0 && (run.kills as usize + alive + i) % 15 == 0);
@@ -128,7 +130,7 @@ fn spawn_waves(
             info!("first elite: {} at {t:.0} s", def.name);
         }
         director.first_elite |= elite;
-        spawn_enemy(&mut commands, def, p, scale, elite);
+        spawn_enemy(&mut commands, def, p, scale, elite, false);
         if def.spawn.is_some() {
             audio.play(super::content::sound::SKELETON_RISE, Some(Vec3::new(p.x, ground.stand(p), p.y)), 0.7, 0.3);
         }
@@ -148,13 +150,12 @@ fn ring_point(ground: &Ground, obstacles: &Obstacles, center: Vec2, radius: f32)
 
 /// A regular Boarman with the given HP (used by the benchmark).
 pub fn spawn_boarman_at(commands: &mut Commands, at: Vec2, hp: f32) {
-    let e = spawn_enemy(commands, &bestiary::BOARMAN, at, 1.0, false);
+    let e = spawn_enemy(commands, &bestiary::BOARMAN, at, 1.0, false, false);
     commands.entity(e).insert(Health { hp, max: hp });
 }
 
 /// Spawns `def` at `at`; `scale` is the run's difficulty multiplier.
-pub fn spawn_enemy(commands: &mut Commands, def: &'static EnemyDef, at: Vec2, scale: f32, elite: bool) -> Entity {
-    let boss = def.weight == 0;
+pub fn spawn_enemy(commands: &mut Commands, def: &'static EnemyDef, at: Vec2, scale: f32, elite: bool, boss: bool) -> Entity {
     let (hp_mult, size, xp_mult) = if elite { (6.0, 1.4, 5) } else { (1.0, 1.0, 1) };
     let hp = config::ENEMY_HP * def.hp * scale * hp_mult;
     let (anim, spawning) = match def.spawn {
@@ -193,9 +194,10 @@ fn chase_and_attack(
     grid: Res<EnemyGrid>,
     ground: Res<Ground>,
     obstacles: Res<Obstacles>,
-    field: Res<FlowField>,
+    field: Option<Res<FlowField>>,
     stats: Res<super::player::HeroStats>,
     buffs: Res<super::abilities::Buffs>,
+    mut mech: ResMut<super::mechanics::Mechanics>,
     mut hero: Query<(&Pos, &mut Health, &Equipment), (With<Hero>, Without<Enemy>)>,
     mut enemies: Query<(Entity, &mut Pos, &mut Vel, &Radius, &mut Enemy, &mut CharacterAnim, &super::abilities::Ailments, &mut Health), Without<Hero>>,
 ) {
@@ -230,14 +232,15 @@ fn chase_and_attack(
             vel.0 = to_hero.normalize_or_zero() * 0.01; // keep facing the hero
             if enemy.attack_timer <= 0.0 && !ail.stunned() {
                 enemy.attack_timer = config::ATTACK_COOLDOWN;
-                hero_hp.hp -= enemy.damage * (1.0 - (gear.damage_reduction() + stats.armor + buffs.armor()).min(0.8));
+                let taken = enemy.damage * (1.0 - (gear.damage_reduction() + stats.armor + buffs.armor()).min(0.8));
+                hero_hp.hp -= super::mechanics::hurt_hero(taken, &stats, &mut mech);
                 // Retaliation affixes hurt the attacker.
                 enemy_hp.hp -= stats.retaliation;
                 *anim = CharacterAnim::once(def.attack);
             }
         } else {
             // Close to the hero walk straight at him; further out follow the flow field around obstacles.
-            let dir = if dist < 3.0 { None } else { field.direction(pos.0) };
+            let dir = if dist < 3.0 { None } else { field.as_ref().and_then(|f| f.direction(pos.0)) };
             vel.0 = dir.unwrap_or(to_hero / dist.max(0.001)) * enemy.speed * ail.speed();
             if enemy.attack_timer < config::ATTACK_COOLDOWN - 1.0 && anim.clip != def.run {
                 *anim = CharacterAnim { speed: def.run_speed, ..CharacterAnim::looping(def.run) };

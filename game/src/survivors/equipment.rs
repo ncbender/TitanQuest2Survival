@@ -237,6 +237,233 @@ pub const RANGER: ArmorDef = ArmorDef {
     armor: 0.25,
 };
 
+// More TQ2 uniques. Stats vary around their weapon class.
+
+pub const CHROMATIC_STAFF: WeaponDef = WeaponDef {
+    id: "chromatic_staff",
+    name: "Chromatic Staff",
+    icon: "t_icon_weapon_weapon_staff2h_chromatic_staff",
+    mesh: "weapons/TQ2/Content/TQ2/Character/Human/Weapon/Staff2H/Unique/Staff2H_Chromatic_Staff_01/sm_staff2h_chromatic_staff_01.glb",
+    damage: 9.0,
+    cooldown: 0.75,
+    ..STAFF
+};
+
+pub const GRACE_OF_EOS: WeaponDef = WeaponDef {
+    id: "grace_of_eos",
+    name: "Grace of Eos",
+    icon: "t_icon_weapon_weapon_staff2h_grace_of_eos",
+    mesh: "weapons/TQ2/Content/TQ2/Character/Human/Weapon/Staff2H/Unique/Staff2H_Grace_Of_Eos_01/sm_staff2h_grace_of_eos_01.glb",
+    damage: 12.0,
+    range: 20.0,
+    ..STAFF
+};
+
+pub const HADES_SCEPTER: WeaponDef = WeaponDef {
+    id: "hades_scepter",
+    name: "Hades' Scepter",
+    icon: "t_icon_weapon_weapon_staff2h_hades_scepter",
+    mesh: "weapons/TQ2/Content/TQ2/Character/Human/Weapon/Staff2H/Unique/Staff2H_Hades_Scepter_01/sm_staff2h_hades_scepter_01.glb",
+    damage: 15.0,
+    cooldown: 1.15,
+    ..STAFF
+};
+
+pub const ILEKTRISMOS: WeaponDef = WeaponDef {
+    id: "ilektrismos",
+    name: "Ilektrismos",
+    icon: "t_icon_weapon_weapon_staff2h_ilektrismos",
+    mesh: "weapons/TQ2/Content/TQ2/Character/Human/Weapon/Staff2H/Unique/Staff2H_Ilektrismos_01/sm_staff2h_ilektrismos_01.glb",
+    damage: 8.0,
+    cooldown: 0.6,
+    speed_or_radius: 30.0,
+    ..STAFF
+};
+
+pub const BARRAGE: WeaponDef = WeaponDef {
+    id: "barrage",
+    name: "Barrage",
+    icon: "t_icon_weapon_weapon_bow2h_barrage",
+    mesh: "weapons/TQ2/Content/TQ2/Character/Human/Weapon/Bow2H/Unique/Bow2H_Barrage_Wide_01/sk_bow2h_barrage_wide_01.glb",
+    damage: 6.5,
+    cooldown: 0.45,
+    ..BOW
+};
+
+pub const BOW_OF_EURYTUS: WeaponDef = WeaponDef {
+    id: "bow_of_eurytus",
+    name: "Bow of Eurytus",
+    icon: "t_icon_weapon_weapon_bow2h_bow_of_eurytus",
+    mesh: "weapons/TQ2/Content/TQ2/Character/Human/Weapon/Bow2H/Unique/Bow2H_Bow_Of_Eurytus_Narrow_01/sk_bow2h_bow_of_eurytus_narrow_01.glb",
+    damage: 11.0,
+    cooldown: 0.85,
+    pierce: 3,
+    ..BOW
+};
+
+pub const SPECTRAL_WARBOW: WeaponDef = WeaponDef {
+    id: "spectral_warbow",
+    name: "Spectral Warbow",
+    icon: "t_icon_weapon_weapon_bow2h_spectral_warbow",
+    mesh: "weapons/TQ2/Content/TQ2/Character/Human/Weapon/Bow2H/Unique/Bow2H_Spectral_Warbow_Narrow_01/sk_bow2h_spectral_warbow_narrow_01.glb",
+    damage: 9.0,
+    range: 30.0,
+    pierce: 4,
+    ..BOW
+};
+
+pub const TEUCERS_WARBOW: WeaponDef = WeaponDef {
+    id: "teucers_warbow",
+    name: "Teucer's Warbow",
+    icon: "t_icon_weapon_weapon_bow2h_teucers_warbow",
+    mesh: "weapons/TQ2/Content/TQ2/Character/Human/Weapon/Bow2H/Unique/Bow2H_Teucers_Warbow_Narrow_01/sk_bow2h_teucers_warbow_narrow_01.glb",
+    damage: 10.0,
+    ..BOW
+};
+
+pub const BONEHACK: WeaponDef = WeaponDef {
+    id: "bonehack",
+    name: "Bonehack",
+    icon: "t_icon_weapon_weapon_axe2h_bonehack",
+    mesh: "weapons/TQ2/Content/TQ2/Character/Human/Weapon/Axe2H/Unique/Axe2H_Bonehack_01/sm_axe2h_bonehack_01.glb",
+    damage: 24.0,
+    cooldown: 0.95,
+    ..AXE
+};
+
+pub const HYDRA_FANG: WeaponDef = WeaponDef {
+    id: "hydra_fang",
+    name: "Hydra Fang",
+    icon: "t_icon_weapon_weapon_axe2h_hydra_fang",
+    mesh: "weapons/TQ2/Content/TQ2/Character/Human/Weapon/Axe2H/Unique/Axe2H_Hydra_Fang_01/sm_axe2h_hydra_fang_01.glb",
+    damage: 31.0,
+    speed_or_radius: 4.3,
+    ..AXE
+};
+
+pub const MEGALOS: WeaponDef = WeaponDef {
+    id: "megalos",
+    name: "Megalos",
+    icon: "t_icon_weapon_weapon_axe2h_megalos",
+    mesh: "weapons/TQ2/Content/TQ2/Character/Human/Weapon/Axe2H/Unique/Axe2H_Megalos_01/sm_axe2h_megalos_01.glb",
+    damage: 36.0,
+    cooldown: 1.35,
+    speed_or_radius: 4.6,
+    ..AXE
+};
+
+pub const RIMESCYTHE: WeaponDef = WeaponDef {
+    id: "rimescythe",
+    name: "Rimescythe",
+    icon: "t_icon_weapon_weapon_axe2h_rimescythe",
+    mesh: "weapons/TQ2/Content/TQ2/Character/Human/Weapon/Axe2H/Unique/Axe2H_Rimescythe_01/sm_axe2h_rimescythe_01.glb",
+    damage: 27.0,
+    ..AXE
+};
+
+pub const ATLANTEAN_SABRE: WeaponDef = WeaponDef {
+    id: "atlantean_sabre",
+    name: "Atlantean Sabre",
+    icon: "t_icon_weapon_weapon_sword1h_atlantean_sabre",
+    mesh: "weapons/TQ2/Content/TQ2/Character/Human/Weapon/Sword1h/Unique/Sword1H_Atlantean_Sabre_01/sm_sword1h_atlantean_sabre_01.glb",
+    damage: 15.0,
+    cooldown: 0.65,
+    ..SWORD
+};
+
+pub const DOXA_KALO: WeaponDef = WeaponDef {
+    id: "doxa_kalo",
+    name: "Doxa Kalo",
+    icon: "t_icon_weapon_weapon_sword1h_doxa_kalo",
+    mesh: "weapons/TQ2/Content/TQ2/Character/Human/Weapon/Sword1h/Unique/Sword1H_Doxa_Kalo_01/sm_sword1h_doxa_kalo_01.glb",
+    damage: 17.0,
+    ..SWORD
+};
+
+pub const SOUL_CARVER: WeaponDef = WeaponDef {
+    id: "soul_carver",
+    name: "Soul Carver",
+    icon: "t_icon_weapon_weapon_sword1h_soul_carver",
+    mesh: "weapons/TQ2/Content/TQ2/Character/Human/Weapon/Sword1h/Unique/Sword1H_Soul_Carver_01/sm_sword1h_soul_carver_01.glb",
+    damage: 20.0,
+    cooldown: 0.9,
+    ..SWORD
+};
+
+pub const SWORD_OF_LIGHT: WeaponDef = WeaponDef {
+    id: "sword_of_light",
+    name: "Sword of Light",
+    icon: "t_icon_weapon_weapon_sword1h_sword_of_light",
+    mesh: "weapons/TQ2/Content/TQ2/Character/Human/Weapon/Sword1h/Unique/Sword1H_Sword_Of_Light_01/sm_sword1h_sword_of_light_01.glb",
+    damage: 19.0,
+    speed_or_radius: 3.5,
+    ..SWORD
+};
+
+pub const AEGIS_OF_LACONIA: ShieldDef = ShieldDef {
+    id: "aegis_of_laconia",
+    name: "Aegis of Laconia",
+    icon: "t_icon_weapon_itemicon_weapon_shield1h_aegis_of_laconia",
+    mesh: "weapons/TQ2/Content/TQ2/Character/Human/Weapon/Shield1h/Unique/Shield1H_Aegis_Of_Laconia_01/sm_shield1h_aegis_of_laconia_01.glb",
+    block: 0.26,
+};
+
+pub const DEIMOS: ShieldDef = ShieldDef {
+    id: "deimos",
+    name: "Deimos",
+    icon: "t_icon_weapon_itemicon_weapon_shield1h_deimos",
+    mesh: "weapons/TQ2/Content/TQ2/Character/Human/Weapon/Shield1h/Unique/Shield1H_Deimos_01/sm_shield1h_deimos_01.glb",
+    block: 0.18,
+};
+
+pub const MOON_DISC: ShieldDef = ShieldDef {
+    id: "moon_disc",
+    name: "Moon Disc",
+    icon: "t_icon_weapon_itemicon_weapon_shield1h_moon_disc",
+    mesh: "weapons/TQ2/Content/TQ2/Character/Human/Weapon/Shield1h/Unique/Shield1H_Moon_Disc_01/sm_shield1h_moon_disc_01.glb",
+    block: 0.16,
+};
+
+pub const THORNWALL: ShieldDef = ShieldDef {
+    id: "thornwall",
+    name: "Thornwall",
+    icon: "t_icon_weapon_itemicon_weapon_shield1h_thornwall",
+    mesh: "weapons/TQ2/Content/TQ2/Character/Human/Weapon/Shield1h/Unique/Shield1H_Thornwall_01/sm_shield1h_thornwall_01.glb",
+    block: 0.22,
+};
+
+pub const BLOOD_GEM: TalismanDef = TalismanDef {
+    id: "blood_gem",
+    name: "Blood Gem",
+    icon: "t_icon_weapon_itemicon_weapon_talisman1h_blood_gem",
+    mesh: "weapons/TQ2/Content/TQ2/Character/Human/Weapon/Talisman1H/Unique/Talisman1H_Blood_Gem_01/sk_talisman1h_blood_gem_01.glb",
+    skill_damage: 0.35,
+};
+
+pub const CHAOS_CUBE: TalismanDef = TalismanDef {
+    id: "chaos_cube",
+    name: "Chaos Cube",
+    icon: "t_icon_weapon_itemicon_weapon_talisman1h_chaos_cube",
+    mesh: "weapons/TQ2/Content/TQ2/Character/Human/Weapon/Talisman1H/Unique/Talisman1H_Chaos_Cube_01/sk_talisman1h_chaos_cube_01.glb",
+    skill_damage: 0.5,
+};
+
+pub const GORGON_HEAD: TalismanDef = TalismanDef {
+    id: "gorgon_head",
+    name: "Gorgon Head",
+    icon: "t_icon_weapon_itemicon_weapon_talisman1h_gorgon_head",
+    mesh: "weapons/TQ2/Content/TQ2/Character/Human/Weapon/Talisman1H/Unique/Talisman1H_Gorgon_Head_01/sk_talisman1h_gorgon_head_01.glb",
+    skill_damage: 0.45,
+};
+
+pub const MOLTEN_ORB: TalismanDef = TalismanDef {
+    id: "molten_orb",
+    name: "Molten Orb",
+    icon: "t_icon_weapon_itemicon_weapon_talisman1h_molten_orb",
+    mesh: "weapons/TQ2/Content/TQ2/Character/Human/Weapon/Talisman1H/Unique/Talisman1H_Molten_Orb_01/sk_talisman1h_molten_orb_01.glb",
+    skill_damage: 0.4,
+};
+
 /// Parts every hero wears regardless of armour.
 const HERO_BASE: &[&str] = &["hero/sk_male_base_animated.glb", "hero/sk_human_male_hair_01_animated.glb"];
 
@@ -263,6 +490,30 @@ pub const ITEMS: &[Item] = &[
     Item::Armor(&ADVENTURER),
     Item::Armor(&SCHOLAR),
     Item::Armor(&RANGER),
+    Item::Weapon(&CHROMATIC_STAFF),
+    Item::Weapon(&GRACE_OF_EOS),
+    Item::Weapon(&HADES_SCEPTER),
+    Item::Weapon(&ILEKTRISMOS),
+    Item::Weapon(&BARRAGE),
+    Item::Weapon(&BOW_OF_EURYTUS),
+    Item::Weapon(&SPECTRAL_WARBOW),
+    Item::Weapon(&TEUCERS_WARBOW),
+    Item::Weapon(&BONEHACK),
+    Item::Weapon(&HYDRA_FANG),
+    Item::Weapon(&MEGALOS),
+    Item::Weapon(&RIMESCYTHE),
+    Item::Weapon(&ATLANTEAN_SABRE),
+    Item::Weapon(&DOXA_KALO),
+    Item::Weapon(&SOUL_CARVER),
+    Item::Weapon(&SWORD_OF_LIGHT),
+    Item::Shield(&AEGIS_OF_LACONIA),
+    Item::Shield(&DEIMOS),
+    Item::Shield(&MOON_DISC),
+    Item::Shield(&THORNWALL),
+    Item::Talisman(&BLOOD_GEM),
+    Item::Talisman(&CHAOS_CUBE),
+    Item::Talisman(&GORGON_HEAD),
+    Item::Talisman(&MOLTEN_ORB),
 ];
 
 impl Item {

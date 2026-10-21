@@ -10,7 +10,21 @@ player extracts it from their own copy.
 - .NET 10 SDK, Rust (stable, MSVC toolchain), git
 - Visual Studio 2022+ with the C++ workload and a Windows SDK
 
-## One-time setup
+## Quick start (install and updates)
+
+```
+git clone <repository url> "Titan quest Survival"
+cd "Titan quest Survival"
+powershell -ExecutionPolicy Bypass -File update.ps1
+```
+
+`update.ps1` does everything below: it pulls the newest version, asks you once to start TQ2 for
+the mappings, extracts the assets from your own install (again only when the asset tools
+changed), builds and starts the game. Run it again for every update. `-NoStart` only updates,
+`-Assets` forces a fresh extraction. Your save (`save/`) and the extracted data (`cache/`) stay
+local and are never uploaded.
+
+## One-time setup (manual)
 
 All commands from PowerShell in the repository root.
 

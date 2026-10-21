@@ -157,6 +157,13 @@ pub enum Stat {
     Armor,
     MoveSpeed,
     Ailment,
+    // TQ2 mechanics (mechanics.rs).
+    Barrier,
+    Rage,
+    Glancing,
+    Execution,
+    Shade,
+    Pickup,
 }
 
 impl Stat {
@@ -171,6 +178,12 @@ impl Stat {
             Stat::Regen => 0.3,
             Stat::Armor | Stat::MoveSpeed => 1.5,
             Stat::Ailment => 4.0,
+            Stat::Barrier => 3.0,
+            Stat::Rage => 5.0,
+            Stat::Glancing => 2.0,
+            Stat::Execution => 1.5,
+            Stat::Shade => 10.0,
+            Stat::Pickup => 6.0,
         }
     }
 
@@ -178,7 +191,21 @@ impl Stat {
     fn detect(line: &str) -> Option<Stat> {
         let l = line.to_ascii_lowercase();
         let has = |s: &str| l.contains(s);
-        Some(if has("attack speed") {
+        Some(if has("glancing") {
+            Stat::Glancing
+        } else if has("barrier") {
+            Stat::Barrier
+        } else if has("me_rage") {
+            Stat::Rage
+        } else if has("execution threshold") {
+            Stat::Execution
+        } else if has("me_shade") {
+            Stat::Shade
+        } else if has("collection range") {
+            Stat::Pickup
+        } else if has("me_device") || has("me_activation") {
+            Stat::SkillDamage
+        } else if has("attack speed") {
             Stat::AttackSpeed
         } else if has("cast speed") || has("cooldown") || has("energy") {
             Stat::CastSpeed
@@ -301,6 +328,12 @@ pub fn apply(profile: &Profile, book: &MasteryBook, stats: &mut HeroStats, hp: &
                 Stat::Armor => stats.armor += v / 100.0,
                 Stat::MoveSpeed => stats.speed *= 1.0 + v / 100.0,
                 Stat::Ailment => stats.ailment += v / 100.0,
+                Stat::Barrier => stats.barrier += v / 100.0,
+                Stat::Rage => stats.rage += v / 100.0,
+                Stat::Glancing => stats.glancing = (stats.glancing + v / 100.0).min(0.6),
+                Stat::Execution => stats.execute = (stats.execute + v / 100.0).min(0.25),
+                Stat::Shade => stats.shade += v / 100.0,
+                Stat::Pickup => stats.pickup *= 1.0 + v / 100.0,
             }
         }
     }

@@ -1,3 +1,4 @@
+using Newtonsoft.Json.Linq;
 using System.Numerics;
 using CUE4Parse.FileProvider;
 using CUE4Parse.UE4.Assets.Exports;
@@ -19,14 +20,62 @@ using SharpGLTF.Schema2;
 // each mesh's original UE simple collision (boxes, spheres, capsules, convex hulls).
 static class SceneExport
 {
-    internal record Placement(string Mesh, Matrix4x4 Ue, bool Collides = true);
+    internal record Placement(string Mesh, Matrix4x4 Ue, bool Collides = true, bool Visible = true);
 
     public static async Task Run(DefaultFileProvider provider, string cache, string name, string mapPath)
     {
-        var outDir = Path.Combine(cache, "export", name);
         var placements = new List<Placement>();
         var meshes = new Dictionary<string, UObject>(); // static meshes and landscape actors
         CollectLevel(provider, mapPath, Matrix4x4.Identity, placements, meshes, 0);
+        await Build(provider, cache, name, mapPath, placements, meshes);
+    }
+
+    /// Size of a Greece landscape streaming proxy (m) and how far the ground reaches past a region.
+    const float ProxySize = 63;
+    const float TerrainMargin = 40;
+
+    /// A square of the Greece world partition around (x, y) (UE metres) with half size `radius`:
+    /// every generated cell overlapping it (see cache/cells.json from `cells`), cut to the square.
+    public static async Task RunRegion(DefaultFileProvider provider, string cache, string name, float x, float y, float radius)
+    {
+        var cells = JArray.Parse(File.ReadAllText(Path.Combine(cache, "cells.json")));
+        var placements = new List<Placement>();
+        var meshes = new Dictionary<string, UObject>();
+        var dir = "TQ2/Content/TQ2/Maps/Greece/l_gr_p/_Generated_/";
+        int used = 0;
+        foreach (var c in cells)
+        {
+            float minX = (float)c["minX"]!, maxX = (float)c["maxX"]!, minY = (float)c["minY"]!, maxY = (float)c["maxY"]!;
+            // Landscape proxies are placed by their corner; allow for their size and the margin.
+            float pad = (bool)c["landscape"]! ? ProxySize + TerrainMargin : 0;
+            if (maxX + pad < x - radius || minX > x + radius + pad || maxY + pad < y - radius || minY > y + radius + pad) continue;
+            int before = placements.Count;
+            CollectLevel(provider, dir + (string)c["map"]!, Matrix4x4.Identity, placements, meshes, 0);
+            used++;
+            if (Environment.GetEnvironmentVariable("TQ2_DEBUG_REGION") != null)
+                foreach (var p in placements.Skip(before).Where(p => meshes[p.Mesh] is not UStaticMesh))
+                    Console.WriteLine($"  {c["map"]}: {p.Mesh.Split('.').Last()} at {p.Ue.M41 / 100:0} {p.Ue.M42 / 100:0}");
+        }
+        bool Inside(Placement p, float margin) =>
+            Math.Abs(p.Ue.M41 / 100 - x) <= radius + margin && Math.Abs(p.Ue.M42 / 100 - y) <= radius + margin;
+        // A proxy (corner + ProxySize) is kept when it overlaps the square plus the margin, so the
+        // ground reaches a little past the props without the holes of a partial ring further out.
+        bool ProxyNear(Placement p)
+        {
+            float px = p.Ue.M41 / 100, py = p.Ue.M42 / 100, m = radius + TerrainMargin;
+            return px <= x + m && px + ProxySize >= x - m && py <= y + m && py + ProxySize >= y - m;
+        }
+        placements = placements.Where(p => meshes[p.Mesh] is not UStaticMesh ? ProxyNear(p) : Inside(p, 0)).ToList();
+        var keep = placements.Select(p => p.Mesh).ToHashSet();
+        foreach (var k in meshes.Keys.Where(k => !keep.Contains(k)).ToList()) meshes.Remove(k);
+        Console.WriteLine($"region ({x}, {y}) ±{radius} m: {used} cells");
+        if (Environment.GetEnvironmentVariable("TQ2_DEBUG_REGION") != null) return;
+        await Build(provider, cache, name, $"region {x} {y} {radius}", placements, meshes);
+    }
+
+    static async Task Build(DefaultFileProvider provider, string cache, string name, string mapPath, List<Placement> placements, Dictionary<string, UObject> meshes)
+    {
+        var outDir = Path.Combine(cache, "export", name);
         Console.WriteLine($"{placements.Count} placements of {meshes.Count} unique meshes ({meshes.Values.Count(m => m is not UStaticMesh)} landscapes)");
 
         // Export each unique mesh (+ its materials/textures) with CUE4Parse.
@@ -68,6 +117,7 @@ static class SceneExport
                 r = new[] { q.X, q.Z, q.Y, -q.W },
                 s = new[] { s.X, s.Z, s.Y },
                 c = p.Collides,
+                v = p.Visible,
             });
         }
         File.WriteAllText(Path.Combine(outDir, "scene.json"), JsonConvert.SerializeObject(new { map = mapPath, instances }));
@@ -75,7 +125,7 @@ static class SceneExport
 
         var colliders = meshes.Where(m => m.Value is UStaticMesh && meshFiles.ContainsKey(m.Key))
             .Select(m => (file: meshFiles[m.Key], shapes: Colliders((UStaticMesh)m.Value)))
-            .Where(c => c.shapes.Count > 0).ToDictionary(c => c.file, c => c.shapes);
+            .Where(c => c.shapes.Count > 0).GroupBy(c => c.file).ToDictionary(g => g.Key, g => g.First().shapes);
         File.WriteAllText(Path.Combine(outDir, "colliders.json"), JsonConvert.SerializeObject(colliders));
         Console.WriteLine($"wrote colliders.json: {colliders.Count}/{meshFiles.Count} meshes have collision, {placements.Count(p => !p.Collides)} placements opt out");
 
@@ -83,8 +133,9 @@ static class SceneExport
             .Select(p => (Path.Combine(outDir, meshFiles[p.Mesh]), ToBevy(p.Ue))).ToList();
         if (landscapes.Count > 0) WriteGround(Path.Combine(outDir, "ground.json"), landscapes);
 
-        var landscapeActors = meshes.Values.Where(m => m is not UStaticMesh).ToList();
-        if (landscapeActors.Count > 0) await WriteTerrain(provider, materials, outDir, landscapeActors, meshFiles.Values.First(f => f.Contains("Landscape")));
+        var landscapeParts = placements.Where(p => meshes[p.Mesh] is not UStaticMesh && meshFiles.ContainsKey(p.Mesh))
+            .Select(p => (actor: meshes[p.Mesh], glb: Path.Combine(outDir, meshFiles[p.Mesh]), transform: ToBevy(p.Ue))).ToList();
+        if (landscapeParts.Count > 0) await WriteTerrain(provider, materials, outDir, landscapeParts);
     }
 
     /// TQ2's ground texture sets (Ground/Terrain/Textures/t_<name>_a), for layers not listed in
@@ -106,20 +157,50 @@ static class SceneExport
     /// Terrain layer blending: CUE4Parse writes one full-size weight map per landscape layer
     /// (ll_<layer>.png); terrain_layers.json names the TQ2 ground textures for each layer.
     /// Writes terrain/*.png and terrain.json { material, tiling, layers[{name, weight, albedo, normal}] }.
-    static async Task WriteTerrain(DefaultFileProvider provider, MaterialLibrary materials, string outDir, List<UObject> landscapes, string landscapeGlb)
+    /// Terrain layer blending. CUE4Parse writes one weight map per layer for every landscape
+    /// actor (ll_<layer>.png, addressed by the actor's UV_1). A map can consist of many streaming
+    /// proxies, so every proxy is exported on its own, the UV_1 -> world mapping is fitted from
+    /// its vertices, and all proxies are resampled into one world-aligned map per layer
+    /// (1 px per metre). terrain.json { material, tiling, bounds[minX, minZ, maxX, maxZ], layers }.
+    static async Task WriteTerrain(DefaultFileProvider provider, MaterialLibrary materials, string outDir,
+        List<(UObject actor, string glb, Matrix4x4 transform)> parts)
     {
         var raw = Path.Combine(outDir, "raw_terrain");
-        var session = new ExportSession(null!);
-        foreach (var l in landscapes) session.Add(l);
-        await session.RunAsync(raw, new ExportOptions(EMeshFormat.Gltf2, exportMorphTargets: false), null!, CancellationToken.None);
-
         var mapping = JsonConvert.DeserializeObject<Dictionary<string, string?>>(
             File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "terrain_layers.json")))!;
+
+        // Per proxy: its weight maps and the affine UV_1 -> world XZ fit.
+        var proxies = new List<(Dictionary<string, SkiaSharp.SKBitmap> weights, float[] fit, float minX, float minZ, float maxX, float maxZ)>();
+        for (int i = 0; i < parts.Count; i++)
+        {
+            var (actor, glb, m) = parts[i];
+            var dir = Path.Combine(raw, i.ToString());
+            var session = new ExportSession(null!);
+            session.Add(actor);
+            await session.RunAsync(dir, new ExportOptions(EMeshFormat.Gltf2, exportMorphTargets: false), null!, CancellationToken.None);
+            var weights = Directory.EnumerateFiles(dir, "ll_*.png", SearchOption.AllDirectories)
+                .ToDictionary(f => Path.GetFileNameWithoutExtension(f)[3..], f => SkiaSharp.SKBitmap.Decode(f));
+            var pos = new List<Vector3>();
+            var uv = new List<Vector2>();
+            foreach (var prim in ModelRoot.Load(glb).LogicalMeshes.SelectMany(me => me.Primitives))
+            {
+                var uv1 = prim.GetVertexAccessor("TEXCOORD_1");
+                if (uv1 == null) continue;
+                pos.AddRange(prim.GetVertexAccessor("POSITION").AsVector3Array().Select(v => Vector3.Transform(v, m)));
+                uv.AddRange(uv1.AsVector2Array());
+            }
+            if (pos.Count < 3 || weights.Count == 0) continue;
+            proxies.Add((weights, FitUvToWorld(pos, uv), pos.Min(p => p.X), pos.Min(p => p.Z), pos.Max(p => p.X), pos.Max(p => p.Z)));
+        }
+        if (proxies.Count == 0) return;
+        float bx0 = proxies.Min(p => p.minX), bz0 = proxies.Min(p => p.minZ), bx1 = proxies.Max(p => p.maxX), bz1 = proxies.Max(p => p.maxZ);
+        int w = (int)Math.Ceiling(bx1 - bx0) + 1, h = (int)Math.Ceiling(bz1 - bz0) + 1;
+
         Directory.CreateDirectory(Path.Combine(outDir, "terrain"));
         var layers = new List<object>();
-        foreach (var weight in Directory.EnumerateFiles(raw, "ll_*.png", SearchOption.AllDirectories).OrderBy(f => f))
+        var names = proxies.SelectMany(p => p.weights.Keys).Distinct().OrderBy(n => n).ToList();
+        foreach (var layer in names)
         {
-            var layer = Path.GetFileNameWithoutExtension(weight)[3..];
             if (!mapping.TryGetValue(layer, out var set) && (set = GuessTerrainSet(provider, layer)) == null)
             {
                 Console.WriteLine($"  terrain layer {layer}: not in terrain_layers.json and no matching texture set, skipped");
@@ -133,18 +214,91 @@ static class SceneExport
                 Console.WriteLine($"  terrain layer {layer}: no albedo for {set}, skipped");
                 continue;
             }
+            using var merged = new SkiaSharp.SKBitmap(w, h, SkiaSharp.SKColorType.Gray8, SkiaSharp.SKAlphaType.Opaque);
+            merged.Erase(SkiaSharp.SKColors.Black);
+            foreach (var (weights, fit, minX, minZ, maxX, maxZ) in proxies)
+            {
+                if (!weights.TryGetValue(layer, out var map)) continue;
+                for (int z = (int)Math.Floor(minZ - bz0); z <= (int)Math.Ceiling(maxZ - bz0) && z < h; z++)
+                    for (int x = (int)Math.Floor(minX - bx0); x <= (int)Math.Ceiling(maxX - bx0) && x < w; x++)
+                    {
+                        if (x < 0 || z < 0) continue;
+                        var (u, v) = WorldToUv(fit, bx0 + x, bz0 + z);
+                        if (u < 0 || v < 0 || u > 1 || v > 1) continue;
+                        var c = map.GetPixel(Math.Clamp((int)(u * (map.Width - 1) + 0.5f), 0, map.Width - 1), Math.Clamp((int)(v * (map.Height - 1) + 0.5f), 0, map.Height - 1));
+                        var old = merged.GetPixel(x, z).Red;
+                        if (c.Red > old) merged.SetPixel(x, z, new SkiaSharp.SKColor(c.Red, c.Red, c.Red));
+                    }
+            }
             var rel = $"terrain/ll_{layer}.png";
-            File.Copy(weight, Path.Combine(outDir, rel), true);
+            using (var image = SkiaSharp.SKImage.FromBitmap(merged))
+                File.WriteAllBytes(Path.Combine(outDir, rel), image.Encode(SkiaSharp.SKEncodedImageFormat.Png, 100).ToArray());
             layers.Add(new { name = layer, weight = rel, albedo, normal });
         }
+        foreach (var p in proxies) foreach (var b in p.weights.Values) b.Dispose();
         Directory.Delete(raw, true);
-        var material = ModelRoot.Load(Path.Combine(outDir, landscapeGlb)).LogicalMaterials.FirstOrDefault()?.Name;
+        var material = ModelRoot.Load(parts[0].glb).LogicalMaterials.FirstOrDefault()?.Name;
         // UE landscape materials tile ground textures every few metres; 1 repeat per 4 m.
-        File.WriteAllText(Path.Combine(outDir, "terrain.json"), JsonConvert.SerializeObject(new { material, tiling = 0.25f, layers }, Formatting.Indented));
-        Console.WriteLine($"wrote terrain.json: {layers.Count} textured layers for material {material}");
+        File.WriteAllText(Path.Combine(outDir, "terrain.json"),
+            JsonConvert.SerializeObject(new { material, tiling = 0.25f, bounds = new[] { bx0, bz0, bx0 + w - 1, bz0 + h - 1 }, layers }, Formatting.Indented));
+        Console.WriteLine($"wrote terrain.json: {layers.Count} layers from {proxies.Count} landscape parts, {w}x{h} m");
     }
 
-    // UE-space matrix -> the same transform in Bevy space (what the game applies to the glb).
+    /// Least-squares affine fit world (x, z) = A·(u, v, 1); returns its inverse as 6 floats so
+    /// (u, v) = inv·(x, z, 1).
+    static float[] FitUvToWorld(List<Vector3> pos, List<Vector2> uv)
+    {
+        // Normal equations for x and z separately on the basis (u, v, 1).
+        double[,] m = new double[3, 3];
+        double[] bx = new double[3], bz = new double[3];
+        for (int i = 0; i < pos.Count; i++)
+        {
+            double[] f = [uv[i].X, uv[i].Y, 1];
+            for (int r = 0; r < 3; r++)
+            {
+                for (int c = 0; c < 3; c++) m[r, c] += f[r] * f[c];
+                bx[r] += f[r] * pos[i].X;
+                bz[r] += f[r] * pos[i].Z;
+            }
+        }
+        var ax = Solve3(m, bx);
+        var az = Solve3(m, bz);
+        // x = ax0 u + ax1 v + ax2 ; z = az0 u + az1 v + az2 -> invert the 2x2 part.
+        double det = ax[0] * az[1] - ax[1] * az[0];
+        double i00 = az[1] / det, i01 = -ax[1] / det, i10 = -az[0] / det, i11 = ax[0] / det;
+        return [(float)i00, (float)i01, (float)(-(i00 * ax[2] + i01 * az[2])), (float)i10, (float)i11, (float)(-(i10 * ax[2] + i11 * az[2]))];
+    }
+
+    static (float u, float v) WorldToUv(float[] inv, float x, float z) =>
+        (inv[0] * x + inv[1] * z + inv[2], inv[3] * x + inv[4] * z + inv[5]);
+
+    static double[] Solve3(double[,] a, double[] b)
+    {
+        var m = (double[,])a.Clone();
+        var r = (double[])b.Clone();
+        for (int c = 0; c < 3; c++)
+        {
+            int p = c;
+            for (int k = c + 1; k < 3; k++) if (Math.Abs(m[k, c]) > Math.Abs(m[p, c])) p = k;
+            for (int k = 0; k < 3; k++) (m[c, k], m[p, k]) = (m[p, k], m[c, k]);
+            (r[c], r[p]) = (r[p], r[c]);
+            for (int k = c + 1; k < 3; k++)
+            {
+                var f = m[k, c] / m[c, c];
+                for (int j = c; j < 3; j++) m[k, j] -= f * m[c, j];
+                r[k] -= f * r[c];
+            }
+        }
+        var x = new double[3];
+        for (int c = 2; c >= 0; c--)
+        {
+            double sum = r[c];
+            for (int k = c + 1; k < 3; k++) sum -= m[c, k] * x[k];
+            x[c] = sum / m[c, c];
+        }
+        return x;
+    }
+
     static Matrix4x4 ToBevy(Matrix4x4 ue)
     {
         Matrix4x4.Decompose(ue, out var s, out var q, out var t);
@@ -173,8 +327,9 @@ static class SceneExport
             var i = z * w + x;
             heights[i] = heights[i] is { } old ? Math.Max(old, p.Y) : p.Y;
         }
-        // Fill cells no vertex landed in from their neighbours.
-        for (int pass = 0; pass < 8 && heights.Any(v => v == null); pass++)
+        // Fill cells no vertex landed in from their neighbours. Gaps still open after two passes
+        // are landscape holes (cellars, caves): they stay null so the game can block them.
+        for (int pass = 0; pass < 2 && heights.Any(v => v == null); pass++)
             for (int z = 0; z < h; z++)
                 for (int x = 0; x < w; x++)
                 {
@@ -190,18 +345,20 @@ static class SceneExport
             cell = Cell,
             w,
             h,
-            heights = heights.Select(v => MathF.Round(v ?? 0, 2)),
+            heights = heights.Select(v => v is { } f ? (float?)MathF.Round(f, 2) : null),
         }));
         Console.WriteLine($"wrote {path}: {w}x{h} cells from {points.Count} landscape vertices");
     }
 
-    internal static void CollectLevel(DefaultFileProvider provider, string mapPath, Matrix4x4 parent,
+    /// Adds the placements of a level (and its level instances). False when the package
+    /// itself could not be loaded.
+    internal static bool CollectLevel(DefaultFileProvider provider, string mapPath, Matrix4x4 parent,
         List<Placement> placements, Dictionary<string, UObject> meshes, int depth)
     {
-        if (depth > 8) return;
+        if (depth > 8) return true;
         IEnumerable<UObject> exports;
         try { exports = provider.LoadPackage(mapPath).GetExports().ToList(); }
-        catch (Exception ex) { Console.WriteLine($"  FAILED {mapPath}: {ex.Message}"); return; }
+        catch (Exception ex) { Console.WriteLine($"  FAILED {mapPath}: {ex.Message}"); return false; }
 
         foreach (var e in exports)
         {
@@ -215,14 +372,20 @@ static class SceneExport
                         if (mesh == null) break;
                         var comp = ToMatrix(ism.GetAbsoluteTransform()) * parent;
                         var collides = CollisionOn(ism);
+                        var visible = Visible(ism, mesh);
+                        if (visible == null || (visible == false && !collides)) break;
                         foreach (var inst in ism.GetInstances() ?? [])
-                            placements.Add(new(mesh, ToMatrix(inst.TransformData) * comp, collides));
+                            placements.Add(new(mesh, ToMatrix(inst.TransformData) * comp, collides, visible.Value));
                         break;
                     }
                     case UStaticMeshComponent smc:
                     {
                         var mesh = Mesh(smc, meshes);
-                        if (mesh != null) placements.Add(new(mesh, ToMatrix(smc.GetAbsoluteTransform()) * parent, CollisionOn(smc)));
+                        if (mesh == null) break;
+                        var collides = CollisionOn(smc);
+                        var visible = Visible(smc, mesh);
+                        if (visible == null || (visible == false && !collides)) break;
+                        placements.Add(new(mesh, ToMatrix(smc.GetAbsoluteTransform()) * parent, collides, visible.Value));
                         break;
                     }
                     case USceneComponent sc when e.ExportType == "LevelInstanceComponent":
@@ -249,6 +412,22 @@ static class SceneExport
             }
             catch (Exception ex) { Console.WriteLine($"  skip {e.ExportType} {e.Name}: {ex.GetType().Name} {ex.Message}"); }
         }
+        return true;
+    }
+
+    /// Editor and lighting helpers that never show up in game (shadow casters, light shafts,
+    /// gizmo arrows, light actor proxies).
+    static readonly string[] HelperMeshes = ["shadowcaster", "axis_arrows", "lightshaft", "lightactor", "foggate", "/vfx/", "unit_box"];
+    /// Invisible blockers (engine shapes, dev meshes): kept for collision only.
+    static readonly string[] BlockerMeshes = ["invisiblewall", "blockmesh", "engine/", "/dev/"];
+
+    /// true = rendered, false = collision only, null = dropped.
+    static bool? Visible(UObject component, string mesh)
+    {
+        var lower = mesh.ToLowerInvariant();
+        if (HelperMeshes.Any(lower.Contains)) return null;
+        if (component.GetOrDefault("bHiddenInGame", false) || !component.GetOrDefault("bVisible", true)) return false;
+        return !BlockerMeshes.Any(lower.Contains);
     }
 
     static readonly string[] NoCollisionProfiles = ["NoCollision", "OverlapAll", "OverlapAllDynamic", "Trigger", "UI"];

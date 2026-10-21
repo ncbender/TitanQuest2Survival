@@ -7,7 +7,7 @@ static class Manifest
 {
     record Character(string[] parts, string skeleton, string[] anims, string[]? clips);
     record File(Dictionary<string, Character> characters, Dictionary<string, string[]> props, Dictionary<string, string> scenes,
-                Dictionary<string, string>? fonts, Dictionary<string, string[]>? textures);
+                Dictionary<string, string>? fonts, Dictionary<string, string[]>? textures, Dictionary<string, float[]>? regions);
 
     public static async Task Run(DefaultFileProvider provider, string root, string cache, string[] only)
     {
@@ -57,6 +57,16 @@ static class Manifest
         {
             Console.WriteLine($"== scene {name}");
             await SceneExport.Run(provider, cache, name, map);
+        }
+        // Arenas cut from the Greece world partition: name -> [x, y, half size] in UE metres.
+        var regions = (manifest.regions ?? []).Where(r => Wanted(r.Key)).ToList();
+        if (regions.Count > 0 && !System.IO.File.Exists(Path.Combine(cache, "cells.json"))) Cells.Run(provider, cache);
+        foreach (var (name, r) in regions)
+        {
+            Console.WriteLine($"== region {name}");
+            var dir = Path.Combine(cache, "export", name);
+            if (Directory.Exists(dir)) Directory.Delete(dir, true);
+            await SceneExport.RunRegion(provider, cache, name, r[0], r[1], r[2]);
         }
     }
 }

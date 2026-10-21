@@ -67,6 +67,12 @@ switch (command)
         Affixes.Run(provider, cache);
         break;
 
+    case "region":
+        // region <name> <x> <y> <radius>: a square of the Greece world (UE metres) as a scene
+        await SceneExport.RunRegion(provider, cache, args[1], float.Parse(args[2], System.Globalization.CultureInfo.InvariantCulture),
+            float.Parse(args[3], System.Globalization.CultureInfo.InvariantCulture), float.Parse(args[4], System.Globalization.CultureInfo.InvariantCulture));
+        break;
+
     case "cells":
         // cells: survey of the Greece world partition cells (position, content) -> cache/cells.json
         Cells.Run(provider, cache);

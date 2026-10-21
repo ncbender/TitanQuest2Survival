@@ -40,6 +40,16 @@ pub struct HeroStats {
     pub crit_mult: f32,
     /// Damage dealt back to an enemy that hits the hero.
     pub retaliation: f32,
+    /// TQ2 mechanics from passives (mechanics.rs): barrier as a fraction of maximum health,
+    /// increased Rage effect (0 = no Rage), glancing hit chance, execution threshold (fraction
+    /// of enemy health), increased shade generation (0 = no shades).
+    pub barrier: f32,
+    pub rage: f32,
+    pub glancing: f32,
+    pub execute: f32,
+    pub shade: f32,
+    /// Current damage bonus from Rage stacks (updated during the run).
+    pub rage_bonus: f32,
 }
 
 impl Default for HeroStats {
@@ -61,6 +71,12 @@ impl Default for HeroStats {
             xp: 1.0,
             crit_mult: 2.0,
             retaliation: 0.0,
+            barrier: 0.0,
+            rage: 0.0,
+            glancing: 0.0,
+            execute: 0.0,
+            shade: 0.0,
+            rage_bonus: 0.0,
         }
     }
 }

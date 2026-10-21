@@ -1,5 +1,6 @@
-// Weight-blended TQ2 landscape layers. Weights come from the landscape's own layer maps
-// (sampled with the landscape-wide UV_1); ground textures tile in world space.
+// Weight-blended TQ2 landscape layers. Weights come from the landscape's layer maps, merged
+// into world-aligned maps (`bounds`), or addressed by UV_1 for older exports; ground textures
+// tile in world space.
 // Only used on landscape meshes, which always have UV_1 and tangents.
 import bevy_pbr::render::{
     pbr_fragment::pbr_input_from_standard_material,
@@ -12,6 +13,7 @@ struct TerrainParams {
     tiling: f32,
     _pad0: f32,
     _pad1: f32,
+    bounds: vec4<f32>,
 }
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(100) var<uniform> params: TerrainParams;
@@ -26,13 +28,17 @@ struct TerrainParams {
 fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> FragmentOutput {
     var pbr_input = pbr_input_from_standard_material(in, is_front);
     let tile_uv = in.world_position.xz * params.tiling;
+    var weight_uv = in.uv_b;
+    if (params.bounds.z > params.bounds.x) {
+        weight_uv = (in.world_position.xz - params.bounds.xy) / (params.bounds.zw - params.bounds.xy);
+    }
 
     var color = vec3<f32>(0.0);
     var tangent_normal = vec3<f32>(0.0);
     var total = 0.0;
     // Sample every layer (uniform control flow keeps derivatives valid for mipmapping).
     for (var i = 0u; i < params.layer_count; i = i + 1u) {
-        let w = textureSample(weights, weights_sampler, in.uv_b, i32(i / 4u))[i % 4u];
+        let w = textureSample(weights, weights_sampler, weight_uv, i32(i / 4u))[i % 4u];
         color += textureSample(albedo, albedo_sampler, tile_uv, i32(i)).rgb * w;
         tangent_normal += (textureSample(normals, normals_sampler, tile_uv, i32(i)).xyz * 2.0 - 1.0) * w;
         total += w;

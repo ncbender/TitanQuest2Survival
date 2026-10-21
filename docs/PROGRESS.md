@@ -108,6 +108,31 @@ the extra skeletons of mane/arm-hair parts were the main cost.
   runs. Not yet: feats, special passives (Rage, …), summon models (pets are glowing orbs),
   the hero facing its attack target.
 
+## Arenas, more enemies and items, TQ2 mechanics, updates (2026-10-21)
+
+- Four arenas (`arenas.rs`), chosen on a new page after "Start Run": Aegean Coast (menu2 beach),
+  Arcadian Woods, Necropolis, Burnt Village. The last three are cut from TQ2's open-world map
+  (Greece world partition, `Tq2Extract region`, listed under `regions` in `tools/assets.json`).
+  Each has its own roster and boss, enemy strength x1.0–2.5 and loot x1.0–2.2; surviving an
+  arena unlocks the next (shared by all heroes, `profile.cleared`). The map is now loaded per
+  run (`map.rs`) instead of once at start-up.
+- Region export: helper meshes (shadow casters, fog gates, light shafts, VFX/dev meshes) are
+  dropped, invisible blockers keep only their collision; the landscape streaming proxies are
+  merged into world-aligned layer weight maps; landscape holes are marked in `ground.json`,
+  blocked for units and shown as dark pits. The playable area is the props' extent.
+- Nine new TQ2 creatures: Wolf, Scorpion, Giant Bat, Crab, Lion, Crocolisk, Boarman Shaman,
+  Lich, Lich Lord (boss), plus scaled bosses Nemean Lion and Elder Crocolisk. Verified in the
+  gallery (textures, animations).
+- 24 more TQ2 unique items (staffs, bows, two-handed axes, swords, shields, talismans) with
+  their TQ2 meshes and icons; verified in hand for axe, sword+shield, bow, staff.
+- TQ2 mechanics for the passives that had no effect (`mechanics.rs`): Barrier, Rage, glancing
+  hits, execution threshold, shades; plus Divine Core range (pickup) and devices (skill
+  damage). Coverage: passives 147 of 148 (was 117 of 127 counted before the data update).
+- `update.ps1`: one command for the friend's PC (pull, mappings, natives, assets only when the
+  tools changed, build, start). README has a quick start.
+- Not yet: real death animations (bodies still tip over and sink), animation LOD for big
+  hordes, enemy ranged attacks, untextured spline meshes in the woods.
+
 ## Blockers / risks
 
 - Usmap RVA is build-specific: a TQ2 patch requires re-running the dumper with the game open.

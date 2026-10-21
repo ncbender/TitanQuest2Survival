@@ -2,6 +2,7 @@
 //! plane (`Pos`, `Vel`, `Health`…) and runs in `FixedUpdate`; visuals only follow it.
 //! Keeping the simulation separate is what later lets a host run it for two players.
 mod abilities;
+pub mod arenas;
 mod bench;
 mod bestiary;
 mod camera;
@@ -12,6 +13,7 @@ mod flowfield;
 mod hud;
 pub mod items;
 pub mod mastery_data;
+mod mechanics;
 mod menu;
 mod player;
 mod profile;
@@ -48,7 +50,10 @@ pub mod content {
     }
 
     /// Export folders whose materials.json the game loads.
-    pub const MATERIAL_DIRS: &[&str] = &["hero", "boarman", "spider", "giant_boar", "skeleton", "harpy", "cyclops", "props", "weapons"];
+    pub const MATERIAL_DIRS: &[&str] = &[
+        "hero", "boarman", "spider", "giant_boar", "skeleton", "harpy", "cyclops", "wolf", "scorpion", "giant_bat", "crab", "lion", "crocolisk",
+        "boarman_mage", "lich", "lich_lord", "props", "weapons",
+    ];
 }
 
 /// Tunables for a run. Kept in one place so balancing does not mean hunting through systems.
@@ -131,16 +136,17 @@ impl Plugin for SurvivorsPlugin {
     fn build(&self, app: &mut App) {
         app.init_state::<GameState>()
             .init_resource::<Run>()
+            .init_resource::<arenas::CurrentArena>()
             .add_message::<StartRun>()
             .add_plugins((camera::plugin, player::plugin, enemies::plugin, combat::plugin, progression::plugin, hud::plugin))
             .add_plugins((menu::plugin, bench::plugin, flowfield::plugin, equipment::plugin, profile::plugin))
-            .add_plugins((mastery_data::plugin, abilities::plugin, skilltree::plugin))
+            .add_plugins((mastery_data::plugin, abilities::plugin, skilltree::plugin, mechanics::plugin))
             .insert_resource(items::AffixBook::load(&crate::export_root()))
             .add_systems(Update, ui::scale_to_window)
             .add_plugins(settings::plugin)
             .add_systems(Startup, skip_menu_in_tests)
             .add_systems(OnEnter(GameState::MainMenu), clear_run)
-            .add_systems(Update, ((start_run, follow_ground, restart).chain(), music));
+            .add_systems(Update, ((crate::map::sync, start_run, follow_ground, restart).chain(), music));
     }
 }
 
@@ -170,14 +176,21 @@ fn start_run(
     book: Res<mastery_data::MasteryBook>,
     affixes: Res<items::AffixBook>,
     entities: Query<Entity, With<RunEntity>>,
+    map: Res<crate::map::LoadedMap>,
+    selected: Res<crate::map::SelectedMap>,
 ) {
-    if requests.read().count() == 0 {
+    // A newly selected arena is loaded first (map::sync); the request waits for it.
+    if !map.ready(&selected) || requests.read().count() == 0 {
         return;
     }
     for e in &entities {
         commands.entity(e).despawn();
     }
     *run = Run { level: 1, xp_next: progression::xp_for_level(1), ..default() };
+    // The loaded map decides the arena (`--scene` can load any arena's map directly).
+    let arena_def = arenas::ARENAS.iter().find(|a| a.scene == selected.0).unwrap_or_else(|| arenas::by_id(&profile.arena));
+    info!("arena: {}", arena_def.name);
+    commands.insert_resource(arenas::CurrentArena(arena_def));
     *stats = player::HeroStats::default();
     loot.0.clear();
     commands.insert_resource(abilities::Buffs::default());
@@ -227,6 +240,7 @@ fn start_run(
             }
         }
     }
+    mechanics::reset(&mut commands, &stats, &hp);
     let hero = player::spawn_hero(&mut commands, arena.start, gear);
     commands.entity(hero).insert(hp);
     // Test hook: TQ2_TEST_LEVELUP=1 opens the level-up window right away (screenshots).

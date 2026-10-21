@@ -3,6 +3,7 @@
 //! change here, between runs.
 use bevy::prelude::*;
 
+use super::arenas::{self, ARENAS};
 use super::equipment::{AttackKind, Item, WEAPONS};
 use super::items::AffixBook;
 use super::mastery_data::{MasteryBook, GOLD, TEXT};
@@ -30,6 +31,8 @@ pub enum Page {
     Armory,
     /// TQ2 mastery screen (skilltree.rs).
     Skills,
+    /// Arena selection before a run.
+    Arenas,
 }
 
 /// The armoury slot whose stash items are listed.
@@ -46,7 +49,8 @@ struct Clicked(Option<MenuAction>);
 
 #[derive(Clone, Copy)]
 enum MenuAction {
-    Start,
+    /// Start a run in `ARENAS[i]`.
+    Start(usize),
     Open(Page),
     Quit,
     /// Create a new hero with `WEAPONS[i]`.
@@ -96,6 +100,7 @@ fn open_menu(mut page: ResMut<Page>, mut view: ResMut<TreeView>, mut settings_op
         Ok("armory") => Page::Armory,
         Ok("skills") => Page::Skills,
         Ok("characters") => Page::Characters,
+        Ok("arenas") => Page::Arenas,
         Ok("settings") => {
             settings_open.0 = true;
             Page::Title
@@ -181,7 +186,7 @@ fn show_page(
                         text(18.0),
                         TextColor(TEXT),
                     ));
-                    p.spawn(button(&assets, "Start Run  (Enter)", 380.0, true, true)).observe(click(MenuAction::Start));
+                    p.spawn(button(&assets, "Start Run  (Enter)", 380.0, true, true)).observe(click(MenuAction::Open(Page::Arenas)));
                     p.spawn(button(&assets, "Masteries  (S)", 380.0, true, false)).observe(click(MenuAction::Open(Page::Skills)));
                     p.spawn(button(&assets, "Armoury  (A)", 380.0, true, false)).observe(click(MenuAction::Open(Page::Armory)));
                     p.spawn(button(&assets, "Characters  (C)", 380.0, true, false)).observe(click(MenuAction::Open(Page::Characters)));
@@ -191,6 +196,48 @@ fn show_page(
                 p.spawn(button(&assets, "Settings  (O)", 380.0, true, false)).observe(click(MenuAction::Settings));
                 p.spawn(button(&assets, "Quit  (Esc)", 380.0, true, false)).observe(click(MenuAction::Quit));
                 p.spawn((Text::new("WASD move · Q/E rotate camera · mouse wheel zoom · 1–3 choose upgrade · Esc pause"), text(16.0)));
+            });
+        }
+        Page::Arenas => {
+            commands.spawn(backdrop(&assets, MainMenuUi)).with_children(|root| {
+                root.spawn((Text::new("Choose an Arena"), title.at(46.0)));
+                root.spawn((Text::new("Survive ten minutes to open the next arena. Later arenas are deadlier and drop better gear."), text(18.0), TextColor(TEXT)));
+                root.spawn(Node { column_gap: Val::Px(14.0), flex_grow: 1.0, align_items: AlignItems::FlexStart, ..default() }).with_children(|row| {
+                    for (i, a) in ARENAS.iter().enumerate() {
+                        let open = arenas::unlocked(a, &profile.cleared);
+                        let present = arenas::available(a);
+                        let chosen = a.id == profile.arena || (profile.arena.is_empty() && i == 0);
+                        row.spawn(panel(&assets, Node { width: Val::Px(296.0), min_height: Val::Px(440.0), ..default() }))
+                            .with_children(|frame| {
+                            // Extra inset so text clears the gold frame.
+                            frame.spawn(Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(8.0), padding: UiRect::all(Val::Px(12.0)), flex_grow: 1.0, ..default() }).with_children(|c| {
+                                c.spawn((Text::new(a.name), title.at(26.0), TextColor(if open { GOLD } else { Color::srgb(0.55, 0.55, 0.55) })));
+                                c.spawn((Text::new(a.blurb), text(16.0), TextColor(TEXT)));
+                                let mut names: Vec<&str> = vec![];
+                                for sp in a.roster {
+                                    if !names.contains(&sp.def.name) {
+                                        names.push(sp.def.name);
+                                    }
+                                }
+                                c.spawn((Text::new(format!("Enemies: {}", names.join(", "))), text(15.0)));
+                                c.spawn((Text::new(format!("Boss: {}", a.boss.name)), text(15.0), TextColor(Color::srgb(0.95, 0.45, 0.35))));
+                                c.spawn((Text::new(format!("Enemy strength x{:.1}   ·   Loot x{:.1}", a.tier, a.luck)), text(15.0), TextColor(TEXT)));
+                                if profile.cleared.iter().any(|id| id == a.id) {
+                                    c.spawn((Text::new("Survived"), text(16.0), TextColor(Color::srgb(0.5, 0.85, 0.45))));
+                                }
+                                c.spawn(Node { flex_grow: 1.0, ..default() });
+                                if !present {
+                                    c.spawn((Text::new("Map not extracted yet (run the asset update)"), text(15.0), TextColor(Color::srgb(0.85, 0.5, 0.4))));
+                                } else if !open {
+                                    c.spawn((Text::new(format!("Locked: survive {}", ARENAS[i - 1].name)), text(15.0), TextColor(Color::srgb(0.6, 0.6, 0.6))));
+                                } else {
+                                    c.spawn(button(&assets, if chosen { "Enter  (Enter)" } else { "Enter" }, 236.0, true, true)).observe(click(MenuAction::Start(i)));
+                                }
+                            });
+                            });
+                    }
+                });
+                root.spawn(button(&assets, "Back (Esc)", 200.0, true, false)).observe(click(MenuAction::Back));
             });
         }
         Page::Characters => {
@@ -341,6 +388,7 @@ fn main_menu_input(
     mut profile: ResMut<Profile>,
     mut view: ResMut<TreeView>,
     mut settings_open: ResMut<SettingsOpen>,
+    mut map: ResMut<crate::map::SelectedMap>,
     mut start: MessageWriter<StartRun>,
     mut exit: MessageWriter<AppExit>,
 ) {
@@ -354,7 +402,8 @@ fn main_menu_input(
         return;
     }
     let key_action = match *page {
-        Page::Title if pressed(KeyCode::Enter) => Some(if profile.created { MenuAction::Start } else { MenuAction::Open(Page::Hero) }),
+        Page::Title if pressed(KeyCode::Enter) => Some(if profile.created { MenuAction::Open(Page::Arenas) } else { MenuAction::Open(Page::Hero) }),
+        Page::Arenas if pressed(KeyCode::Enter) => Some(MenuAction::Start(ARENAS.iter().position(|a| a.id == profile.arena).unwrap_or(0))),
         Page::Title if pressed(KeyCode::KeyA) && profile.created => Some(MenuAction::Open(Page::Armory)),
         Page::Title if pressed(KeyCode::KeyS) && profile.created => Some(MenuAction::Open(Page::Skills)),
         Page::Title if pressed(KeyCode::KeyC) && profile.created => Some(MenuAction::Open(Page::Characters)),
@@ -374,8 +423,15 @@ fn main_menu_input(
         armed.0 = None;
     }
     match action {
-        MenuAction::Start => {
-            start.write(StartRun);
+        MenuAction::Start(i) => {
+            let a = &ARENAS[i];
+            if arenas::unlocked(a, &profile.cleared) && arenas::available(a) {
+                if profile.arena != a.id {
+                    profile.arena = a.id.to_string();
+                }
+                map.0 = a.scene.to_string();
+                start.write(StartRun);
+            }
         }
         MenuAction::Open(p) => *page = p,
         MenuAction::Back => {

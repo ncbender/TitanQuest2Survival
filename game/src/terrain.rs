@@ -36,6 +36,9 @@ struct TerrainParams {
     tiling: f32,
     _pad0: f32,
     _pad1: f32,
+    /// World XZ rectangle the weight maps cover (min x, min z, max x, max z); empty means the
+    /// landscape's own UV_1 addresses them (older exports).
+    bounds: Vec4,
 }
 
 impl MaterialExtension for TerrainExtension {
@@ -48,6 +51,8 @@ impl MaterialExtension for TerrainExtension {
 struct TerrainFile {
     material: String,
     tiling: f32,
+    #[serde(default)]
+    bounds: Option<[f32; 4]>,
     layers: Vec<Layer>,
 }
 
@@ -66,25 +71,26 @@ struct Terrain {
     material: Handle<TerrainMaterial>,
 }
 
-pub struct TerrainPlugin {
-    pub export_root: String,
-    pub scene: String,
-}
+pub struct TerrainPlugin;
 
 impl Plugin for TerrainPlugin {
     fn build(&self, app: &mut App) {
         embedded_asset!(app, "terrain.wesl");
         app.add_plugins(MaterialPlugin::<TerrainMaterial>::default()).add_systems(Update, swap_landscape_material);
-        let dir = format!("{}/{}", self.export_root, self.scene);
-        match std::fs::read_to_string(format!("{dir}/terrain.json")).map(|s| serde_json::from_str::<TerrainFile>(&s)) {
-            Ok(Ok(file)) => build_terrain(app, &dir, file),
-            Ok(Err(e)) => error!("{dir}/terrain.json: {e}"),
-            Err(_) => info!("{dir}: no terrain.json, landscape keeps its single texture"),
-        }
     }
 }
 
-fn build_terrain(app: &mut App, dir: &str, file: TerrainFile) {
+/// Builds the blended material for the map in `dir` (or none when it has no terrain.json).
+pub fn load(world: &mut World, dir: &str) {
+    world.remove_resource::<Terrain>();
+    match std::fs::read_to_string(format!("{dir}/terrain.json")).map(|s| serde_json::from_str::<TerrainFile>(&s)) {
+        Ok(Ok(file)) => build_terrain(world, dir, file),
+        Ok(Err(e)) => error!("{dir}/terrain.json: {e}"),
+        Err(_) => info!("{dir}: no terrain.json, landscape keeps its single texture"),
+    }
+}
+
+fn build_terrain(world: &mut World, dir: &str, file: TerrainFile) {
     let started = std::time::Instant::now();
     let n = file.layers.len();
     // Weights: 4 layers per RGBA slice, at the weight maps' own resolution.
@@ -109,7 +115,6 @@ fn build_terrain(app: &mut App, dir: &str, file: TerrainFile) {
         .map(|l| l.normal.as_ref().map_or_else(|| flat_normal(), |p| load_rgba(&format!("{dir}/{p}"), [128, 128, 255, 255])))
         .collect();
 
-    let world = app.world_mut();
     let mut images = world.resource_mut::<Assets<Image>>();
     let weights = images.add(array_image(ww, wh, slices as u32, weights, 1, TextureFormat::Rgba8Unorm, false));
     let albedo = images.add(mipmapped_array(&albedo, TextureFormat::Rgba8UnormSrgb));
@@ -117,7 +122,7 @@ fn build_terrain(app: &mut App, dir: &str, file: TerrainFile) {
     let material = world.resource_mut::<Assets<TerrainMaterial>>().add(TerrainMaterial {
         base: StandardMaterial { perceptual_roughness: 0.9, ..default() },
         extension: TerrainExtension {
-            params: TerrainParams { layer_count: n as u32, tiling: file.tiling, _pad0: 0.0, _pad1: 0.0 },
+            params: TerrainParams { layer_count: n as u32, tiling: file.tiling, _pad0: 0.0, _pad1: 0.0, bounds: file.bounds.map_or(Vec4::ZERO, Vec4::from_array) },
             weights,
             albedo,
             normals,

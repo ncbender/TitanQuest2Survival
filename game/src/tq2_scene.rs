@@ -20,6 +20,9 @@ struct Instance {
     /// False when the placed component switched its collision off.
     #[serde(default = "yes")]
     c: bool,
+    /// False for invisible blockers (collision only).
+    #[serde(default = "yes")]
+    v: bool,
 }
 
 fn yes() -> bool {
@@ -42,6 +45,8 @@ pub struct SceneInfo {
     pub center: Vec3,
     /// Height of the map's water surface mesh, if any.
     pub water: Option<f32>,
+    /// Ground-plane (x, z) extent of the placed props (landscape excluded).
+    pub props: Rect,
     pub obstacles: Obstacles,
 }
 
@@ -54,7 +59,7 @@ pub fn spawn_scene(commands: &mut Commands, assets: &AssetServer, export_root: &
         Err(e) => { error!("{path}: {e}"); return None; }
     };
     let mut handles = HashMap::new();
-    for inst in &file.instances {
+    for inst in file.instances.iter().filter(|i| i.v) {
         let scene = handles
             .entry(inst.mesh.clone())
             .or_insert_with(|| assets.load(GltfAssetLabel::Scene(0).from_asset(format!("{dir}/{}", inst.mesh))))
@@ -72,13 +77,17 @@ pub fn spawn_scene(commands: &mut Commands, assets: &AssetServer, export_root: &
     }
     info!("{dir}: {} instances of {} meshes", file.instances.len(), handles.len());
     let median = |axis: usize| {
-        let mut v: Vec<f32> = file.instances.iter().map(|i| i.t[axis]).collect();
+        let mut v: Vec<f32> = file.instances.iter().filter(|i| i.v).map(|i| i.t[axis]).collect();
         v.sort_by(f32::total_cmp);
         v.get(v.len() / 2).copied().unwrap_or(0.0)
     };
     let water = file.instances.iter().find(|i| i.mesh.contains("watersurface")).map(|i| i.t[1]);
     let obstacles = load_obstacles(&file, export_root, dir);
-    Some(SceneInfo { center: Vec3::new(median(0), median(1), median(2)), water, obstacles })
+    let mut props = Rect::EMPTY;
+    for i in file.instances.iter().filter(|i| i.v && !i.mesh.contains("Landscape")) {
+        props = props.union_point(Vec2::new(i.t[0], i.t[2]));
+    }
+    Some(SceneInfo { center: Vec3::new(median(0), median(1), median(2)), water, props, obstacles })
 }
 
 /// Places every collision shape of every colliding instance into the world.

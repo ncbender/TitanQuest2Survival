@@ -78,9 +78,9 @@ fn gallery(mut commands: Commands, time: Res<Time<Real>>, mut done: Local<bool>,
         return;
     }
     *done = true;
-    let defs = bestiary::WAVES.iter().copied().chain([&bestiary::CYCLOPS]);
+    let defs = bestiary::ALL.iter().copied();
     for (i, def) in defs.enumerate() {
         let at = hero.0 + Vec2::from_angle(i as f32 * 1.05) * 9.0;
-        spawn_enemy(&mut commands, def, at, 1.0, false);
+        spawn_enemy(&mut commands, def, at, 1.0, false, false);
     }
 }

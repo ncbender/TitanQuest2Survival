@@ -26,11 +26,11 @@ pub struct FlowField {
 }
 
 pub fn plugin(app: &mut App) {
-    app.add_systems(Startup, build).add_systems(FixedUpdate, refresh.run_if(in_state(GameState::Playing)));
+    app.add_observer(build).add_systems(FixedUpdate, refresh.run_if(in_state(GameState::Playing).and_eager(resource_exists::<FlowField>)));
 }
 
 /// Marks every cell a body cannot stand in: deep water or inside an obstacle.
-fn build(mut commands: Commands, ground: Res<Ground>, obstacles: Res<Obstacles>) {
+fn build(_: On<crate::map::MapLoaded>, mut commands: Commands, ground: Res<Ground>, obstacles: Res<Obstacles>) {
     let b = ground.bounds();
     let (w, h) = (((b.max.x - b.min.x) / CELL) as usize + 1, ((b.max.y - b.min.y) / CELL) as usize + 1);
     let mut blocked = vec![false; w * h];

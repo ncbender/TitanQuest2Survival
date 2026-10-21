@@ -162,6 +162,23 @@ and the icons/artwork as PNG:
 UI frames/backgrounds (`ui`), item icons (`items`) and skill VFX textures (`vfx`) are loose
 texture lists in `tools/assets.json`.
 
+## World partition regions (arenas)
+
+- `l_gr_p` (Greece) has 5,947 generated cells with hashed names; `Tq2Extract cells` surveys them
+  into `cache/cells.json` (3,920 non-empty; every cell loaded, none failed). Persistent level
+  holds no landscape proxies; all 62 m `LandscapeStreamingProxy` actors live in cells.
+- `region <name> <x> <y> <r>` (UE metres): cells overlapping the square; props cut to it,
+  landscape proxies kept when they overlap the square + 40 m.
+- Filtered meshes: shadow casters, fog gates, light shafts, light-actor proxies, gizmo arrows,
+  `/VFX/` meshes and unit boxes are dropped; `Engine/`, `/Dev/`, invisible walls and hidden
+  components are kept for collision only (`v: false` in scene.json).
+- Terrain: each proxy is exported alone; its UV_1 → world XZ mapping is fitted by least squares
+  from its vertices, and all proxies' `ll_<layer>.png` are resampled into one world-aligned
+  Gray8 map per layer (1 px/m). `terrain.json` gets `bounds` [minX, minZ, maxX, maxZ] and the
+  shader samples weights by world position.
+- Landscape holes (no vertices after two fill passes) are `null` in `ground.json`.
+- Some spots are poor arenas: around (-1800, -1080) is the Olympus palace on a flat plane.
+
 ## Building all game assets
 
 `tools/assets.json` lists every character (parts, skeleton, animation folders, optional clip

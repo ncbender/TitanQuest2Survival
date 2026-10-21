@@ -71,6 +71,7 @@ fn spawn_hud(mut commands: Commands) {
 fn update_hud(
     run: Res<Run>,
     loot: Res<RunLoot>,
+    mech: Res<super::mechanics::Mechanics>,
     hero: Query<&Health, With<Hero>>,
     enemies: Query<(&Enemy, &Health)>,
     mut life: Query<&mut Node, (With<LifeFill>, Without<XpFill>)>,
@@ -91,7 +92,13 @@ fn update_hud(
             .map(|(e, hp)| format!("
 Boss: {} {:.0} %", e.def.name, hp.hp / hp.max * 100.0))
             .unwrap_or_default();
-        let found = if loot.0.is_empty() { String::new() } else { format!("   Loot: {}", loot.0.len()) };
+        let mut found = if loot.0.is_empty() { String::new() } else { format!("   Loot: {}", loot.0.len()) };
+        if mech.barrier_max > 0.0 {
+            found += &format!("   Barrier: {:.0}", mech.barrier);
+        }
+        if mech.rage > 0 {
+            found += &format!("   Rage: {}", mech.rage);
+        }
         text.0 = format!(
             "Level {}   {:02}:{:02} / 10:00   Kills: {}   Enemies: {}{found}{boss}",
             run.level,

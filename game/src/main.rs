@@ -1,6 +1,6 @@
 //! Titan Quest II Survivors.
 //!
-//! usage: tq2_survivors [--scene <export dir>]   (default: menu2)
+//! usage: tq2_survivors [--scene <export dir>]   (load that map and its arena directly; default: menu2)
 //!        tq2_survivors --list-sounds            print TQ2's FMOD event paths
 //! keys: WASD move, Q/E rotate camera, mouse wheel / R-F zoom, 1-3 pick upgrade, R restart
 //! env TQ2_SCREENSHOT=<path>: save a screenshot after TQ2_SCREENSHOT_DELAY s (default 4) and exit
@@ -10,7 +10,7 @@
 //! env TQ2_TEST_GEAR=sword,shield,ranger: start with this gear
 //! env TQ2_TEST_GALLERY=1: spawn one of every enemy type next to the hero
 //! env TQ2_TEST_END=<s>: end the run after s seconds (end screen, loot banking)
-//! env TQ2_MENU=1|hero|armory|skills|choose (+ TQ2_MENU_SELECT=tier,index[,p]): open a menu page (screenshots)
+//! env TQ2_MENU=1|hero|armory|skills|choose|characters|arenas|settings (+ TQ2_MENU_SELECT=tier,index[,p]): open a menu page
 //! env TQ2_TEST_SKILLS=Ice Shards,Fissure,…: run with these TQ2 skills instead of the profile's
 //! env TQ2_TEST_CHEST=<luck> / TQ2_TEST_LEVELUP=1: chest next to the hero / open the level-up window
 //! env TQ2_ZOOM=<m> / TQ2_PITCH=<rad>: camera distance and angle (close-ups)
@@ -21,6 +21,7 @@ mod character;
 mod fonts;
 mod fx;
 mod ground;
+mod map;
 mod obstacles;
 mod survivors;
 mod terrain;
@@ -31,8 +32,7 @@ mod vfx;
 use bevy::prelude::*;
 use bevy::render::view::screenshot::{save_to_disk, Screenshot};
 
-use ground::Ground;
-use survivors::{Arena, SurvivorsPlugin};
+use survivors::SurvivorsPlugin;
 
 /// Where `Tq2Extract` put the exported assets: `TQ2_EXPORT_ROOT`, or the first `cache/export`
 /// found walking up from the executable or the working directory (works for `cargo run`
@@ -74,37 +74,24 @@ fn main() {
     .add_plugins((tq2_materials::Tq2MaterialsPlugin, character::CharacterPlugin, audio::AudioPlugin, vfx::VfxPlugin, fx::FxPlugin))
     .add_systems(Update, auto_screenshot);
 
-    app.add_plugins(terrain::TerrainPlugin { export_root: root.clone(), scene: scene.clone() });
+    app.add_plugins(terrain::TerrainPlugin);
     fonts::install(&mut app, &root);
-    load_world(&mut app, &root, &scene);
-    app.add_plugins(SurvivorsPlugin).run();
+    load_shared_materials(&mut app, &root);
+    app.add_plugins(SurvivorsPlugin);
+    // `--scene` overrides the arena's map (development, screenshots).
+    if args.iter().any(|a| a == "--scene") {
+        app.insert_resource(map::SelectedMap(scene.clone()));
+    }
+    map::load(app.world_mut(), &scene);
+    app.run();
 }
 
-/// Spawns the map, loads its ground and picks a start point on land near its centre.
-fn load_world(app: &mut App, root: &str, scene: &str) {
-    let world = app.world_mut();
-    let assets = world.resource::<AssetServer>().clone();
-    let mut library = world.resource_mut::<tq2_materials::MaterialLibrary>();
-    for dir in survivors::content::MATERIAL_DIRS.iter().copied().chain([scene]) {
+/// Materials of characters, weapons and props (maps add their own when loaded).
+fn load_shared_materials(app: &mut App, root: &str) {
+    let mut library = app.world_mut().resource_mut::<tq2_materials::MaterialLibrary>();
+    for dir in survivors::content::MATERIAL_DIRS {
         library.load_dir(root, dir);
     }
-    let mut commands = world.commands();
-    let mut info = tq2_scene::spawn_scene(&mut commands, &assets, root, scene);
-    world.flush();
-
-    let water = info.as_ref().and_then(|i| i.water);
-    let obstacles = info.as_mut().map(|i| std::mem::take(&mut i.obstacles)).unwrap_or_default();
-    let ground = Ground::load(&format!("{root}/{scene}/ground.json"), water).unwrap_or_else(Ground::flat);
-    let center = info.map(|i| Vec2::new(i.center.x, i.center.z)).unwrap_or_default();
-    // Spiral outwards from the map centre until we stand on land.
-    let start = (0..400)
-        .map(|i| center + Vec2::from_angle(i as f32 * 0.7) * (i as f32 * 0.25))
-        .find(|p| ground.is_land(*p) && obstacles.resolve(*p, 0.6, ground.stand(*p)) == *p)
-        .unwrap_or(center);
-    info!("start at {start}");
-    world.insert_resource(ground);
-    world.insert_resource(obstacles);
-    world.insert_resource(Arena { start });
 }
 
 fn auto_screenshot(mut commands: Commands, time: Res<Time>, mut done: Local<bool>, mut exit: MessageWriter<AppExit>) {

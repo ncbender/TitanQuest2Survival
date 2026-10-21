@@ -74,7 +74,7 @@ pub fn reset(commands: &mut Commands) {
 /// Damage of one hit (base already includes damage bonuses) and whether it crit.
 pub fn roll_damage(base: f32, stats: &HeroStats) -> (f32, bool) {
     let crit = fastrand::f32() < stats.crit;
-    (base * if crit { stats.crit_mult } else { 1.0 }, crit)
+    (base * (1.0 + stats.rage_bonus) * if crit { stats.crit_mult } else { 1.0 }, crit)
 }
 
 /// The equipped weapon's auto-attack: projectiles (staff, bow) or a melee sweep (sword).
@@ -227,13 +227,20 @@ fn kill_dead(
     mut run: ResMut<Run>,
     audio: Res<Audio>,
     ground: Res<Ground>,
-    dead: Query<(Entity, &Health, &Pos, &Enemy)>,
+    arena: Res<super::arenas::CurrentArena>,
+    stats: Res<HeroStats>,
+    mut mech: ResMut<super::mechanics::Mechanics>,
+    mut hero: Query<&mut Health, With<Hero>>,
+    dead: Query<(Entity, &Health, &Pos, &Enemy), Without<Hero>>,
 ) {
     for (e, hp, pos, enemy) in &dead {
-        if hp.hp > 0.0 {
+        // Execution: wounded enemies below the threshold die (not bosses).
+        let threshold = if enemy.boss { 0.0 } else { hp.max * stats.execute };
+        if hp.hp > threshold {
             continue;
         }
         run.kills += 1;
+        super::mechanics::on_kill(&mut mech, &stats, &mut hero);
         audio.play(sound::KILL, Some(Vec3::new(pos.0.x, ground.stand(pos.0) + 1.0, pos.0.y)), 0.6, 0.08);
         // Leave the simulation now; the body sinks away in `fade_dying`.
         commands.entity(e).remove::<(Enemy, Health, Pos)>().insert(Dying(0.0));
@@ -241,7 +248,7 @@ fn kill_dead(
         if enemy.elite || enemy.boss {
             info!("chest dropped at {:.0} s", run.time);
             // Bosses drop better chests, and loot improves over the run.
-            let luck = if enemy.boss { 2.5 } else { 1.3 } * (1.0 + run.time / 600.0);
+            let luck = if enemy.boss { 2.5 } else { 1.3 } * (1.0 + run.time / 600.0) * arena.0.luck;
             drop_chest(&mut commands, &assets, pos.0, luck);
         }
         let shards = if enemy.boss { 10 } else { 1 };

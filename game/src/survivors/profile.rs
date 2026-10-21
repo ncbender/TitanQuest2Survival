@@ -81,6 +81,9 @@ pub struct Profile {
     /// Index of the character being played.
     pub active: usize,
     pub next_uid: u64,
+    /// Arena chosen last (id from arenas.rs) and arenas survived; unlocks are shared by all heroes.
+    pub arena: String,
+    pub cleared: Vec<String>,
 }
 
 impl Deref for Profile {
@@ -366,6 +369,7 @@ pub fn bank_run(
     mut profile: ResMut<Profile>,
     mut reward: ResMut<LastReward>,
     book: Res<AffixBook>,
+    arena: Res<super::arenas::CurrentArena>,
 ) {
     if run.banked || run.level == 0 {
         return;
@@ -382,6 +386,9 @@ pub fn bank_run(
     profile.passive_points += passive;
     profile.runs += 1;
     profile.best_time = profile.best_time.max(run.time);
+    if run.won && !profile.cleared.iter().any(|c| c == arena.0.id) {
+        profile.cleared.push(arena.0.id.to_string());
+    }
     info!("run banked: +{active} active / +{passive} passive points, items {items:?}");
     *reward = LastReward { active, passive, items };
 }

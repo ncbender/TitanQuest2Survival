@@ -56,3 +56,17 @@ act through their own stat lines; modifiers through the words of their descripti
 (more damage, area, cooldown, …). Feats and special passives (Rage etc.) are shown but have no
 effect yet. Three items were switched to TQ2 uniques that have item icons (Fotia, Harpe,
 Shield of Aeneas); old profile ids are migrated.
+
+## D9 – Arenas from TQ2's open world, unlocked in order (2026-10-21, user's choice)
+The user chose several TQ2 regions as arenas over one big map or endless waves. Arenas are
+squares (±90 m) of the Greece world partition picked from a survey of its cells
+(`Tq2Extract cells`, scored by asset folders), plus the existing menu beach. Each arena has its
+own enemies and boss and is unlocked by surviving the previous one; unlocks are shared by all
+heroes like the stash. Co-op stays for later (user).
+
+## D10 – TQ2 mechanics in simplified form (2026-10-21)
+Passives that build on TQ2 systems the game did not have (Barrier, Rage, glancing hits,
+execution, shades) now drive small versions of those systems (`mechanics.rs`), with numbers
+of this game (TQ2's balance tables are not readable). A mechanic is inactive until a passive
+grants it.
+
