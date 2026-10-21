@@ -129,6 +129,10 @@ class MaterialLibrary(DefaultFileProvider provider, string outDir)
         };
         var def = new Def(albedo, Pick(Normal), Pick(Orm), color,
             scl.GetValueOrDefault("UV Scale", 1f), alpha, cutoff ?? 0.3333f, twoSided ?? false, string.Join(" > ", chain));
+        // Hair colour comes from the archetype at runtime; the master's own texture is just
+        // a layered noise. Render Grim hair as a plain dark colour instead.
+        if (chain[^1].Equals("m_human_hair_master", StringComparison.OrdinalIgnoreCase) && def.albedo?.Contains("t_3noise") == true)
+            def = def with { albedo = null, color = [0.07f, 0.05f, 0.035f, 1f] };
         if (Overrides.TryGetValue(name, out var o))
         {
             string? Tex(string? asset) => asset is null or "none" ? null

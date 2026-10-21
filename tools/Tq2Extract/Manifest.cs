@@ -1,0 +1,40 @@
+using CUE4Parse.FileProvider;
+using Newtonsoft.Json;
+
+// Builds every asset the game uses from tools/assets.json, so a fresh checkout (or a
+// friend's PC) needs one command: `dotnet run -- assets` (optionally only some names).
+static class Manifest
+{
+    record Character(string[] parts, string skeleton, string[] anims, string[]? clips);
+    record File(Dictionary<string, Character> characters, Dictionary<string, string[]> props, Dictionary<string, string> scenes);
+
+    public static async Task Run(DefaultFileProvider provider, string root, string cache, string[] only)
+    {
+        var manifest = JsonConvert.DeserializeObject<File>(System.IO.File.ReadAllText(Path.Combine(root, "tools", "assets.json")))!;
+        bool Wanted(string name) => only.Length == 0 || only.Contains(name);
+
+        foreach (var (name, c) in manifest.characters.Where(c => Wanted(c.Key)))
+        {
+            Console.WriteLine($"== character {name}");
+            var dir = Path.Combine(cache, "export", name);
+            if (Directory.Exists(dir)) Directory.Delete(dir, true);
+            await Export.Run(provider, cache, name, c.parts);
+            Animate.Run(provider, cache, name, c.skeleton, c.anims, c.clips);
+        }
+        foreach (var (name, paths) in manifest.props.Where(p => Wanted(p.Key)))
+        {
+            Console.WriteLine($"== props {name}");
+            var dir = Path.Combine(cache, "export", name);
+            if (Directory.Exists(dir)) Directory.Delete(dir, true);
+            await Export.Run(provider, cache, name, paths);
+            var library = new MaterialLibrary(provider, dir);
+            library.AddFromMeshes(Directory.EnumerateFiles(dir, "*.glb", SearchOption.AllDirectories));
+            library.Save();
+        }
+        foreach (var (name, map) in manifest.scenes.Where(s => Wanted(s.Key)))
+        {
+            Console.WriteLine($"== scene {name}");
+            await SceneExport.Run(provider, cache, name, map);
+        }
+    }
+}

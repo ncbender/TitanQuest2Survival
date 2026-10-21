@@ -2,6 +2,7 @@
 //! plane (`Pos`, `Vel`, `Health`…) and runs in `FixedUpdate`; visuals only follow it.
 //! Keeping the simulation separate is what later lets a host run it for two players.
 mod bench;
+mod bestiary;
 mod camera;
 mod combat;
 mod enemies;
@@ -24,14 +25,6 @@ pub mod content {
     pub const HERO_IDLE: &str = "a_male_staff2h_idle_combat_01";
     pub const HERO_RUN: &str = "a_male_staff2h_run_01";
 
-    pub const BOARMAN_PARTS: &[&str] = &[
-        "boarman/sk_boarman_brute_01_animated.glb",
-        "boarman/sk_boarman_brute_mane_01_animated.glb",
-        "boarman/sk_boarman_brute_armhair_01_animated.glb",
-    ];
-    pub const BOARMAN_RUN: &str = "a_boarman_club+club_run_01";
-    pub const BOARMAN_ATTACK: &str = "a_boarman_club+shield_attack_01";
-
     pub const BOLT: &str = "props/TQ2/Content/TQ2/Character/Abilities/Forge_Sentry_01/sm_forge_sentry_projectile_01.glb";
     pub const SHARD: &str = "props/TQ2/Content/TQ2/Character/Crafting/In_World/Mystical_Shards/sm_mystic_shards.glb";
     /// Forge Call ability ring (TQ2) used as the Nova shockwave; outer radius in metres.
@@ -39,7 +32,7 @@ pub mod content {
     pub const NOVA_RING_RADIUS: f32 = 0.16;
 
     /// Export folders whose materials.json the game loads.
-    pub const MATERIAL_DIRS: &[&str] = &["hero", "boarman", "props"];
+    pub const MATERIAL_DIRS: &[&str] = &["hero", "boarman", "spider", "giant_boar", "skeleton", "harpy", "cyclops", "props"];
 }
 
 /// Tunables for a run. Kept in one place so balancing does not mean hunting through systems.

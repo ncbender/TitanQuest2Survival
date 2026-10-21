@@ -53,7 +53,7 @@ fn spawn_hud(mut commands: Commands) {
 fn update_hud(
     run: Res<Run>,
     hero: Query<&Health, With<Hero>>,
-    enemies: Query<(), With<Enemy>>,
+    enemies: Query<(&Enemy, &Health)>,
     mut life: Query<&mut Node, (With<LifeFill>, Without<XpFill>)>,
     mut xp: Query<&mut Node, (With<XpFill>, Without<LifeFill>)>,
     mut text: Query<&mut Text, With<StatusText>>,
@@ -66,8 +66,14 @@ fn update_hud(
     }
     if let Ok(mut text) = text.single_mut() {
         let t = run.time as u32;
+        let boss = enemies
+            .iter()
+            .find(|(e, _)| e.boss)
+            .map(|(e, hp)| format!("
+Boss: {} {:.0} %", e.def.name, hp.hp / hp.max * 100.0))
+            .unwrap_or_default();
         text.0 = format!(
-            "Stufe {}   {:02}:{:02} / 10:00   Besiegt: {}   Gegner: {}",
+            "Stufe {}   {:02}:{:02} / 10:00   Besiegt: {}   Gegner: {}{boss}",
             run.level,
             t / 60,
             t % 60,

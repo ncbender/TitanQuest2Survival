@@ -14,15 +14,17 @@ static class Animate
     record Track(string Bone, Dictionary<float, Quaternion> Rot, Dictionary<float, Vector3> Pos, Dictionary<float, Vector3> Scale);
     record Clip(string Name, List<Track> Tracks);
 
-    public static void Run(DefaultFileProvider provider, string cache, string name, string skeletonPath, IEnumerable<string> animArgs)
+
+    /// <param name="clipPrefixes">Optional clip-name prefixes; only matching sequences are baked.</param>
+    public static void Run(DefaultFileProvider provider, string cache, string name, string skeletonPath, IEnumerable<string> animArgs, string[]? clipPrefixes)
     {
         var exportDir = Path.Combine(cache, "export", name);
         var skeleton = provider.LoadPackage(skeletonPath).GetExports().OfType<USkeleton>().First();
         var boneNames = skeleton.ReferenceSkeleton.FinalRefBoneInfo.Select(b => b.Name.Text).ToArray();
 
         var clips = new List<Clip>();
-        var animPaths = animArgs.SelectMany(arg => provider.Files.Keys.Where(k => k.EndsWith(".uasset") &&
-            (k.Equals(arg, StringComparison.OrdinalIgnoreCase) || k.StartsWith(arg.TrimEnd('/') + "/", StringComparison.OrdinalIgnoreCase))));
+        var animPaths = Export.Resolve(provider, animArgs, ".uasset")
+            .Where(p => clipPrefixes == null || clipPrefixes.Any(c => Path.GetFileName(p).StartsWith(c, StringComparison.OrdinalIgnoreCase)));
         foreach (var path in animPaths)
         {
             try

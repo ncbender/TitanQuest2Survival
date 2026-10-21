@@ -2,7 +2,7 @@
 use bevy::prelude::*;
 use std::collections::HashMap;
 
-use super::content::{BOARMAN_ATTACK, BOARMAN_PARTS, BOARMAN_RUN};
+use super::bestiary::{self, EnemyDef};
 use super::player::Hero;
 use super::{config, GameState, Health, Pos, Radius, Run, RunEntity, Vel};
 use crate::character::{attach_parts, CharacterAnim};
@@ -11,10 +11,13 @@ use crate::obstacles::Obstacles;
 
 #[derive(Component)]
 pub struct Enemy {
+    pub def: &'static EnemyDef,
     pub damage: f32,
     pub speed: f32,
     pub xp: u32,
     pub attack_timer: f32,
+    /// Seconds left in the spawn animation; the enemy does not move meanwhile.
+    pub spawning: f32,
     pub boss: bool,
 }
 
@@ -33,7 +36,7 @@ impl EnemyGrid {
 
     /// Enemies whose centre lies within `r` (+ their radius) of `p`.
     pub fn near(&self, p: Vec2, r: f32) -> impl Iterator<Item = (Entity, Vec2, f32)> + '_ {
-        let reach = ((r + 1.0) / CELL).ceil() as i32;
+        let reach = ((r + 2.0) / CELL).ceil() as i32;
         let (cx, cz) = Self::key(p);
         (-reach..=reach)
             .flat_map(move |dx| (-reach..=reach).map(move |dz| (cx + dx, cz + dz)))
@@ -93,8 +96,8 @@ fn spawn_waves(
 
     if director.bosses_spawned < config::BOSS_TIMES.len() && t >= config::BOSS_TIMES[director.bosses_spawned] {
         director.bosses_spawned += 1;
-        if let Some(p) = ring_point(&ground, &obstacles, hero.0) {
-            spawn_boarman(&mut commands, p, 40.0 * config::ENEMY_HP * scale, 3.0 * config::ENEMY_DAMAGE, 0.8, 50, 2.2, true);
+        if let Some(p) = ring_point(&ground, &obstacles, hero.0, bestiary::CYCLOPS.radius) {
+            spawn_enemy(&mut commands, &bestiary::CYCLOPS, p, scale, false);
         }
     }
 
@@ -105,47 +108,63 @@ fn spawn_waves(
     director.spawn_timer = interval;
     let alive = enemies.iter().count();
     for i in 0..per_wave.min(cap.saturating_sub(alive)) {
-        let Some(p) = ring_point(&ground, &obstacles, hero.0) else { continue };
+        let def = bestiary::pick(t);
+        let Some(p) = ring_point(&ground, &obstacles, hero.0, def.radius) else { continue };
         // Every 15th spawn after the first minute is an elite.
         let elite = t > 60.0 && (run.kills as usize + alive + i) % 15 == 0;
-        let (hp, size, xp) = if elite { (6.0, 1.45, 5) } else { (1.0, 1.0, 1) };
-        spawn_boarman(&mut commands, p, config::ENEMY_HP * scale * hp, config::ENEMY_DAMAGE * scale.sqrt(), 1.0, xp, size, false);
+        spawn_enemy(&mut commands, def, p, scale, elite);
     }
 }
 
 /// A random point on the spawn ring that is on land and not inside an obstacle.
-fn ring_point(ground: &Ground, obstacles: &Obstacles, center: Vec2) -> Option<Vec2> {
+fn ring_point(ground: &Ground, obstacles: &Obstacles, center: Vec2, radius: f32) -> Option<Vec2> {
     let b = ground.bounds();
     (0..12).find_map(|_| {
         let angle = fastrand::f32() * std::f32::consts::TAU;
         let dist = config::SPAWN_RING.0 + fastrand::f32() * (config::SPAWN_RING.1 - config::SPAWN_RING.0);
         let p = center + Vec2::from_angle(angle) * dist;
-        (b.contains(p) && ground.is_land(p) && obstacles.resolve(p, 1.0, ground.stand(p)) == p).then_some(p)
+        (b.contains(p) && ground.is_land(p) && obstacles.resolve(p, radius, ground.stand(p)) == p).then_some(p)
     })
 }
 
 /// A regular Boarman with the given HP (used by the benchmark).
 pub fn spawn_boarman_at(commands: &mut Commands, at: Vec2, hp: f32) {
-    spawn_boarman(commands, at, hp, config::ENEMY_DAMAGE, 1.0, 1, 1.0, false);
+    let e = spawn_enemy(commands, &bestiary::BOARMAN, at, 1.0, false);
+    commands.entity(e).insert(Health { hp, max: hp });
 }
 
-#[allow(clippy::too_many_arguments)]
-fn spawn_boarman(commands: &mut Commands, at: Vec2, hp: f32, damage: f32, speed_mult: f32, xp: u32, size: f32, boss: bool) {
-    let speed = config::ENEMY_SPEED * speed_mult * (0.9 + fastrand::f32() * 0.2);
+/// Spawns `def` at `at`; `scale` is the run's difficulty multiplier.
+pub fn spawn_enemy(commands: &mut Commands, def: &'static EnemyDef, at: Vec2, scale: f32, elite: bool) -> Entity {
+    let boss = def.weight == 0;
+    let (hp_mult, size, xp_mult) = if elite { (6.0, 1.4, 5) } else { (1.0, 1.0, 1) };
+    let hp = config::ENEMY_HP * def.hp * scale * hp_mult;
+    let (anim, spawning) = match def.spawn {
+        Some((clip, secs)) => (CharacterAnim::once(clip), secs),
+        None => (CharacterAnim { speed: def.run_speed, ..CharacterAnim::looping(def.run) }, 0.0),
+    };
     let e = commands
         .spawn((
-            Enemy { damage, speed, xp, attack_timer: 0.0, boss },
+            Enemy {
+                def,
+                damage: config::ENEMY_DAMAGE * def.damage * scale.sqrt(),
+                speed: config::ENEMY_SPEED * def.speed * (0.9 + fastrand::f32() * 0.2),
+                xp: def.xp * xp_mult,
+                attack_timer: 0.0,
+                spawning,
+                boss,
+            },
             RunEntity,
             Pos(at),
             Vel::default(),
-            Radius(config::ENEMY_RADIUS * size),
+            Radius(def.radius * size),
             Health { hp, max: hp },
-            CharacterAnim::looping(BOARMAN_RUN),
-            Transform::from_scale(Vec3::splat(size)),
+            anim,
+            Transform::from_scale(Vec3::splat(def.scale * size)),
             Visibility::default(),
         ))
         .id();
-    attach_parts(commands, e, BOARMAN_PARTS);
+    attach_parts(commands, e, def.parts);
+    e
 }
 
 fn chase_and_attack(
@@ -159,10 +178,16 @@ fn chase_and_attack(
     let Ok((hero_pos, mut hero_hp)) = hero.single_mut() else { return };
     let dt = time.delta_secs();
     for (e, mut pos, mut vel, radius, mut enemy, mut anim) in &mut enemies {
+        let def = enemy.def;
+        if enemy.spawning > 0.0 {
+            enemy.spawning -= dt;
+            vel.0 = Vec2::ZERO;
+            continue;
+        }
         enemy.attack_timer -= dt;
         let to_hero = hero_pos.0 - pos.0;
         let dist = to_hero.length();
-        let reach = config::ATTACK_RANGE * radius.0 / config::ENEMY_RADIUS;
+        let reach = config::ATTACK_RANGE + radius.0 - config::ENEMY_RADIUS;
 
         // Push away from neighbours so the horde spreads instead of stacking.
         let mut push = Vec2::ZERO;
@@ -182,12 +207,12 @@ fn chase_and_attack(
             if enemy.attack_timer <= 0.0 {
                 enemy.attack_timer = config::ATTACK_COOLDOWN;
                 hero_hp.hp -= enemy.damage;
-                *anim = CharacterAnim::once(BOARMAN_ATTACK);
+                *anim = CharacterAnim::once(def.attack);
             }
         } else {
             vel.0 = to_hero / dist.max(0.001) * enemy.speed;
-            if enemy.attack_timer < config::ATTACK_COOLDOWN - 1.0 && anim.clip != BOARMAN_RUN {
-                *anim = CharacterAnim::looping(BOARMAN_RUN);
+            if enemy.attack_timer < config::ATTACK_COOLDOWN - 1.0 && anim.clip != def.run {
+                *anim = CharacterAnim { speed: def.run_speed, ..CharacterAnim::looping(def.run) };
             }
         }
         let next = ground.clamp_move(pos.0, pos.0 + (vel.0 + push * 4.0) * dt);

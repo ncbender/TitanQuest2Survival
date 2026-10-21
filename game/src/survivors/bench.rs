@@ -1,10 +1,12 @@
 //! Benchmark mode (env TQ2_BENCH=<enemies>): spawns that many animated Boarmen around the
 //! hero, keeps the hero alive, measures frame times for 10 s and appends the result to
-//! cache/bench.txt, then exits. Nothing here runs in normal play.
+//! cache/bench.txt, then exits. Gallery mode (env TQ2_TEST_GALLERY=1) spawns one of every
+//! enemy type next to the hero. Nothing here runs in normal play.
 use bevy::prelude::*;
 use std::io::Write;
 
-use super::enemies::{spawn_boarman_at, Enemy};
+use super::bestiary;
+use super::enemies::{spawn_boarman_at, spawn_enemy, Enemy};
 use super::player::Hero;
 use super::{config, Health, Pos};
 
@@ -19,6 +21,9 @@ struct Bench {
 }
 
 pub fn plugin(app: &mut App) {
+    if std::env::var_os("TQ2_TEST_GALLERY").is_some() {
+        app.add_systems(Update, gallery);
+    }
     let Some(n) = std::env::var("TQ2_BENCH").ok().and_then(|v| v.parse().ok()) else { return };
     app.insert_resource(Bench { enemies: n, spawned: false, frames: vec![] }).add_systems(Update, run_bench);
 }
@@ -64,5 +69,18 @@ fn run_bench(
             let _ = writeln!(file, "{line}");
         }
         exit.write(AppExit::Success);
+    }
+}
+
+fn gallery(mut commands: Commands, time: Res<Time<Real>>, mut done: Local<bool>, hero: Query<&Pos, With<Hero>>) {
+    let Ok(hero) = hero.single() else { return };
+    if *done || time.elapsed_secs() < 1.0 {
+        return;
+    }
+    *done = true;
+    let defs = bestiary::WAVES.iter().copied().chain([&bestiary::CYCLOPS]);
+    for (i, def) in defs.enumerate() {
+        let at = hero.0 + Vec2::from_angle(i as f32 * 1.05) * 9.0;
+        spawn_enemy(&mut commands, def, at, 1.0, false);
     }
 }

@@ -1,0 +1,76 @@
+{
+  "characters": {
+    "hero": {
+      "parts": [
+        "TQ2/Content/TQ2/Character/Human/Male/Body/sk_male_base.uasset",
+        "TQ2/Content/TQ2/Character/Human/Armor/Civilian/Armor_Greek_Adventurer_01/sk_male_torso_greek_adventurer_01.uasset",
+        "TQ2/Content/TQ2/Character/Human/Armor/Civilian/Armor_Greek_Adventurer_01/sk_male_leg_greek_adventurer_01.uasset",
+        "TQ2/Content/TQ2/Character/Human/Male/Hair/sk_human_male_hair_01.uasset"
+      ],
+      "skeleton": "TQ2/Content/TQ2/Character/Human/Humanoid/Body/skel_humanoid_base.uasset",
+      "anims": ["TQ2/Content/TQ2/Character/Human/Male/Animation/Staff_2H"]
+    },
+    "boarman": {
+      "parts": [
+        "TQ2/Content/TQ2/Character/Boarman/Boarman_Brute/sk_boarman_brute_01.uasset",
+        "TQ2/Content/TQ2/Character/Boarman/Boarman_Brute/sk_boarman_brute_mane_01.uasset",
+        "TQ2/Content/TQ2/Character/Boarman/Boarman_Brute/sk_boarman_brute_armhair_01.uasset"
+      ],
+      "skeleton": "TQ2/Content/TQ2/Character/Boarman/Boarman_Brute/skel_boarman_brute_01.uasset",
+      "anims": ["TQ2/Content/TQ2/Character/Boarman/Boarman_Brute/Animation"]
+    },
+    "spider": {
+      "parts": ["TQ2/Content/TQ2/Character/Wildlife/Spider_01-02/sk_spider_01.uasset"],
+      "skeleton": "TQ2/Content/TQ2/Character/Wildlife/Spider_01-02/skel_spider_01.uasset",
+      "anims": ["TQ2/Content/TQ2/Character/Wildlife/Spider_01-02/Animation"],
+      "clips": ["a_spider_01_"]
+    },
+    "giant_boar": {
+      "parts": [
+        "TQ2/Content/TQ2/Character/Wildlife/Giant_Boar_01/sk_giant_boar_01.uasset",
+        "TQ2/Content/TQ2/Character/Wildlife/Giant_Boar_01/sk_giant_boar_01_tusk_01.uasset",
+        "TQ2/Content/TQ2/Character/Wildlife/Giant_Boar_01/sk_giant_boar_01_hair_01.uasset"
+      ],
+      "skeleton": "TQ2/Content/TQ2/Character/Wildlife/Giant_Boar_01/skel_giant_boar_01.uasset",
+      "anims": ["TQ2/Content/TQ2/Character/Wildlife/Giant_Boar_01/Animation"],
+      "clips": ["a_giant_boar_run_01", "a_giant_boar_aa_regular_01", "a_giant_boar_idle_combat_01", "a_giant_boar_cast_regular_charge"]
+    },
+    "skeleton": {
+      "parts": [
+        "TQ2/Content/TQ2/Character/Undead/Skeleton_01/sk_skeleton_01_body_01.uasset",
+        "TQ2/Content/TQ2/Character/Undead/Skeleton_01/sk_skeleton_01_head_01.uasset"
+      ],
+      "skeleton": "TQ2/Content/TQ2/Character/Human/Humanoid/Body/skel_humanoid_base.uasset",
+      "anims": [
+        "TQ2/Content/TQ2/Character/Undead/Skeleton_01/Animation/Unarmed",
+        "TQ2/Content/TQ2/Character/Undead/Skeleton_01/Animation/Sword"
+      ]
+    },
+    "harpy": {
+      "parts": ["TQ2/Content/TQ2/Character/Harpy/Harpy_01/sk_harpy_01.uasset"],
+      "skeleton": "TQ2/Content/TQ2/Character/Harpy/Harpy_01/skel_harpy_01.uasset",
+      "anims": ["TQ2/Content/TQ2/Character/Harpy/Harpy_01/Animation"]
+    },
+    "cyclops": {
+      "parts": [
+        "TQ2/Content/TQ2/Character/Cyclops/Cyclops_01/sk_cyclops_01.uasset",
+        "TQ2/Content/TQ2/Character/Cyclops/Cyclops_01/sk_cyclops_01_hair_01.uasset",
+        "TQ2/Content/TQ2/Character/Cyclops/Cyclops_01/sk_cyclops_01_horn_01.uasset"
+      ],
+      "skeleton": "TQ2/Content/TQ2/Character/Cyclops/Cyclops_01/skel_cyclops_01.uasset",
+      "anims": ["TQ2/Content/TQ2/Character/Cyclops/Cyclops_01/Animation"]
+    }
+  },
+  "props": {
+    "props": [
+      "TQ2/Content/TQ2/Character/Abilities/Forge_Sentry_01/sm_forge_sentry_projectile_01.uasset",
+      "TQ2/Content/TQ2/Character/Crafting/In_World/Mystical_Shards/sm_mystic_shards.uasset",
+      "TQ2/Content/TQ2/Character/Human/Weapon/Bow2H/Projectile/sm_projectile_greek_narrow_01.uasset",
+      "TQ2/Content/TQ2/Character/Abilities/Forge_Call_01/sm_forge_call_ring_outer.uasset",
+      "TQ2/Content/TQ2/Character/Abilities/Forge_Call_01/sm_forge_call_ring_inner.uasset"
+    ]
+  },
+  "scenes": {
+    "menu2": "TQ2/Content/TQ2/Maps/menu/l_main_menu_scene_02.umap"
+  }
+}

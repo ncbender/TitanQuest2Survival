@@ -1,6 +1,7 @@
 // Reads Titan Quest II assets straight from the local Steam install (read-only)
 // and exports them into the git-ignored cache/ folder.
 //
+//   assets [name...]             build all game assets listed in tools/assets.json
 //   list                         write cache/filelist.txt
 //   dump <package>...            print exports as JSON
 //   export <name> <path|dir>...  export meshes/textures to cache/export/<name>
@@ -13,12 +14,7 @@ using System.Reflection;
 using CUE4Parse.Compression;
 using CUE4Parse.FileProvider;
 using CUE4Parse.MappingsProvider.Usmap;
-using CUE4Parse.UE4.Assets.Exports.Animation;
-using CUE4Parse.UE4.Objects.Core.Math;
 using CUE4Parse.UE4.Versions;
-using CUE4Parse_Conversion;
-using CUE4Parse_Conversion.Animations;
-using CUE4Parse_Conversion.Options;
 using Newtonsoft.Json;
 
 const string GameDir = @"C:\Program Files (x86)\Steam\steamapps\common\Titan Quest II\TQ2\Content\Paks";
@@ -67,35 +63,14 @@ switch (command)
         break;
 
     case "export":
-    {
-        var outDir = Path.Combine(cache, "export", args[1]);
-        var options = new ExportOptions(EMeshFormat.Gltf2, exportMorphTargets: false);
-        var session = new ExportSession(null!);
-        foreach (var arg in args.Skip(2))
-        {
-            var prefix = arg.TrimEnd('/') + "/";
-            var paths = provider.Files.Keys.Where(k => (k.EndsWith(".uasset") || k.EndsWith(".umap")) &&
-                (k.Equals(arg, StringComparison.OrdinalIgnoreCase) || k.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)));
-            foreach (var path in paths)
-            {
-                try
-                {
-                    // Animations are not exported here: CUE4Parse has no glTF animation
-                    // writer, so the "animate" command bakes them into the mesh .glb.
-                    foreach (var e in provider.LoadPackage(path).GetExports())
-                        if (e.ExportType is "SkeletalMesh" or "Texture2D" or "StaticMesh" or "World" or "Landscape" or "LandscapeStreamingProxy" or "LandscapeProxy")
-                            session.Add(e);
-                }
-                catch (Exception ex) { Console.WriteLine($"  FAILED {path}: {ex.GetType().Name}: {ex.Message}"); }
-            }
-        }
-        var results = await session.RunAsync(outDir, options, null!, CancellationToken.None);
-        foreach (var r in results)
-            Console.WriteLine(r.Success
-                ? $"ok   {r.ObjectPath} -> {string.Join(", ", (r.DiskFilePaths ?? []).Select(Path.GetFileName))}"
-                : $"FAIL {r.ObjectPath}: {r.Error?.GetType().Name} {r.Error?.Message}");
+        // export <name> <path|dir>...
+        await Export.Run(provider, cache, args[1], args.Skip(2));
         break;
-    }
+
+    case "assets":
+        // assets [name...]: build everything in tools/assets.json (or only the named entries)
+        await Manifest.Run(provider, root, cache, args.Skip(1).ToArray());
+        break;
 
     case "scene":
         // scene <name> <map.umap>
@@ -132,11 +107,11 @@ switch (command)
 
     case "animate":
         // animate <export name> <skeleton pkg> <anim pkg or dir>...
-        Animate.Run(provider, cache, args[1], args[2], args.Skip(3));
+        Animate.Run(provider, cache, args[1], args[2], args.Skip(3), null);
         break;
 
     default:
-        Console.WriteLine("commands: list | dump <pkg>... | export <name> <path>... | animate <name> <skeleton> <anims>... | reflect <type>... | ctor <type>");
+        Console.WriteLine("commands: assets [name...] | list | dump <pkg>... | export <name> <path>... | animate <name> <skeleton> <anims>... | materials <name> | scene <name> <map> | level <dir> | reflect <type>... | ctor <type>");
         return 1;
 }
 return 0;

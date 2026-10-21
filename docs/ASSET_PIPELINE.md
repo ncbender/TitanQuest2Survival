@@ -106,6 +106,17 @@ parameter wins; slot by exact name/substring, then texture suffix (`_a`, `_n`, `
 In Bevy: vertex colours stripped (UE uses them as masks), normal maps flipped Y (DirectX),
 ORM matches Bevy's channel packing, samplers repeat.
 
+## Building all game assets
+
+`tools/assets.json` lists every character (parts, skeleton, animation folders, optional clip
+prefixes), prop set and scene the game uses. One command rebuilds everything:
+
+```
+cd tools/Tq2Extract
+dotnet run -- assets            # all
+dotnet run -- assets spider     # only one entry
+```
+
 ## Commands
 
 ```

@@ -28,7 +28,8 @@
 
 1. Performance: animation LOD / update-rate reduction, drop mane/armhair parts at distance,
    profile where the 250+ cost goes (pose evaluation vs. skinning vs. draw calls).
-2. More enemy types (wolves, satyrs, centaurs…) and a real death animation.
+2. ~~More enemy types~~ Spider, Giant Boar, Skeleton (rises from the ground), Harpy, Cyclops boss
+   added via `tools/assets.json` + `bestiary.rs`; still no real death animation.
 3. Weapon on the hero (staff), cast animation, TQ2 VFX instead of the temporary Nova torus.
 4. Terrain layer blending (weight maps) and a larger land arena (Greece world partition, FastGeo).
 5. Satyr assembly (static-mesh parts on the humanoid rig).
