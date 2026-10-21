@@ -171,6 +171,9 @@ the extra skeletons of mane/arm-hair parts were the main cost.
 - Animation: base clips crossfade (0.2 s) instead of switching hard; while running, an attack
   turns the hero at most 50° towards the target instead of flipping the body around.
 - Not verified yet in a real hand-played session: drag and drop (no automated mouse test).
+- Character sheet (`charstats.rs`): offense, skills, defense, utility from the same calculation
+  as the run start; in the inventory (when no item is selected) and on the pause screen (Esc or
+  C) with the run's level-up bonuses. Wheel scrolling for the bag and the sheet (`ScrollArea`).
 
 ## Blockers / risks
 

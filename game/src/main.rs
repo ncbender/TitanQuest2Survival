@@ -13,6 +13,7 @@
 //! env TQ2_MENU=1|hero|armory|skills|choose|characters|arenas|settings (+ TQ2_MENU_SELECT=tier,index[,p]): open a menu page
 //! env TQ2_TEST_SKILLS=Ice Shards,Fissure,…: run with these TQ2 skills instead of the profile's
 //! env TQ2_TEST_CHEST=<luck> / TQ2_TEST_LEVELUP=1: chest next to the hero / open the level-up window
+//! env TQ2_TEST_PAUSE=<s>: open the pause screen (character sheet) after s seconds
 //! env TQ2_ZOOM=<m> / TQ2_PITCH=<rad>: camera distance and angle (close-ups)
 //! env TQ2_PROFILE=<path>: profile file (default save/profile.json; test runs use save/test_profile.json)
 //! env TQ2_BENCH=<n>: spawn n enemies, measure 10 s of frame times into cache/bench.txt, exit

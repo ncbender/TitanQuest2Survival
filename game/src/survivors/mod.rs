@@ -6,6 +6,7 @@ pub mod arenas;
 mod bench;
 mod bestiary;
 mod camera;
+mod charstats;
 mod combat;
 mod enemies;
 mod equipment;
@@ -201,13 +202,12 @@ fn start_run(
         // Tests (and a first start without the menu) get a staff hero.
         profile.new_hero(&equipment::STAFF);
     }
-    let mut hp = Health { hp: config::PLAYER_HP, max: config::PLAYER_HP };
-    skills::apply(&profile, &book, &mut stats, &mut hp);
+    // Same numbers as the character sheet: base values, passives, gear.
+    let (start_stats, mut hp, mut gear) = charstats::starting(&profile, &book, &affixes);
+    *stats = start_stats;
     let (loadout, pool) = run_loadout(&profile, &book);
     commands.insert_resource(loadout);
     commands.insert_resource(pool);
-    let mut gear = profile.equipment(&affixes);
-    items::apply(&gear, &mut stats, &mut hp);
     // Test hook: TQ2_TEST_CHEST=1 drops a chest right next to the hero.
     if std::env::var_os("TQ2_TEST_CHEST").is_some() {
         let luck = std::env::var("TQ2_TEST_CHEST").ok().and_then(|v| v.parse().ok()).unwrap_or(1.0);

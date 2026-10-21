@@ -5,11 +5,12 @@
 use bevy::camera::RenderTarget;
 use bevy::color::Mix;
 use bevy::prelude::*;
+use bevy::ui_widgets::ScrollArea;
 use bevy::render::render_resource::TextureFormat;
 
 use super::equipment::Item;
 use super::items::{AffixBook, ItemInstance};
-use super::mastery_data::{GOLD, TEXT};
+use super::mastery_data::{MasteryBook, GOLD, TEXT};
 use super::menu::{MainMenuUi, Page};
 use super::profile::{Profile, Slot};
 use super::ui::{self, button, headline, panel, text};
@@ -262,11 +263,12 @@ pub struct Ctx<'a> {
     pub affixes: &'a AffixBook,
     pub state: &'a InvState,
     pub preview: &'a Preview,
+    pub book: &'a MasteryBook,
 }
 
 /// The inventory page.
 pub fn build(commands: &mut Commands, cx: &Ctx) {
-    let Ctx { assets, title, profile, affixes, state, preview } = *cx;
+    let Ctx { assets, title, profile, affixes, state, preview, book } = *cx;
     commands.spawn(ui::backdrop(assets, MainMenuUi)).with_children(|root| {
         // Header: title, hero, gold.
         root.spawn(Node { align_items: AlignItems::Center, column_gap: Val::Px(20.0), flex_shrink: 0.0, ..default() }).with_children(|h| {
@@ -279,10 +281,10 @@ pub fn build(commands: &mut Commands, cx: &Ctx) {
         root.spawn(Node { column_gap: Val::Px(14.0), flex_grow: 1.0, min_height: Val::Px(0.0), ..default() }).with_children(|body| {
             character_column(body, cx);
             bag_column(body, cx);
-            body.spawn(panel(assets, Node { width: Val::Px(300.0), flex_shrink: 0.0, flex_direction: FlexDirection::Column, ..default() })).with_children(|p| {
+            body.spawn(panel(assets, Node { width: Val::Px(300.0), flex_shrink: 0.0, flex_direction: FlexDirection::Column, min_height: Val::Px(0.0), ..default() })).with_children(|p| {
                 // A separate column, so rebuilding it keeps the panel's frame.
-                p.spawn((Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(8.0), flex_grow: 1.0, ..default() }, Details))
-                    .with_children(|d| details(d, assets, title, profile, affixes, state));
+                p.spawn((Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(8.0), flex_grow: 1.0, min_height: Val::Px(0.0), ..default() }, Details))
+                    .with_children(|d| details(d, assets, title, profile, affixes, book, state));
             });
         });
         root.spawn(Node { align_items: AlignItems::Center, column_gap: Val::Px(18.0), flex_shrink: 0.0, ..default() }).with_children(|f| {
@@ -294,7 +296,7 @@ pub fn build(commands: &mut Commands, cx: &Ctx) {
 }
 
 fn character_column(body: &mut ChildSpawnerCommands, cx: &Ctx) {
-    let Ctx { assets, title, profile, affixes, state, preview } = *cx;
+    let Ctx { assets, title, profile, affixes, state, preview, .. } = *cx;
     let eq = profile.equipment(affixes);
     body.spawn(panel(assets, Node { width: Val::Px(400.0), flex_shrink: 0.0, flex_direction: FlexDirection::Column, align_items: AlignItems::Center, ..default() }))
         .with_children(|c| {
@@ -378,10 +380,12 @@ fn bag_column(body: &mut ChildSpawnerCommands, cx: &Ctx) {
             row_gap: Val::Px(4.0),
             flex_grow: 1.0,
             min_height: Val::Px(0.0),
+            flex_basis: Val::Px(0.0),
             overflow: Overflow::scroll_y(),
             align_content: AlignContent::Start,
             ..default()
         })
+        .insert(ScrollArea)
         .with_children(|grid| {
             for i in 0..capacity {
                 let inst = bag.get(i).copied();
@@ -411,9 +415,9 @@ fn bag_column(body: &mut ChildSpawnerCommands, cx: &Ctx) {
 }
 
 /// The selected (or hovered) item with what can be done to it, and the anvil drop zone.
-fn details(d: &mut ChildSpawnerCommands, assets: &AssetServer, title: &TitleFont, profile: &Profile, affixes: &AffixBook, state: &InvState) {
-    headline(d, assets, title, "Anvil", 22.0);
+fn details(d: &mut ChildSpawnerCommands, assets: &AssetServer, title: &TitleFont, profile: &Profile, affixes: &AffixBook, book: &MasteryBook, state: &InvState) {
     let shown = state.hover.or(state.selected).and_then(|u| profile.item(u));
+    headline(d, assets, title, if shown.is_some() { "Anvil" } else { "Attributes" }, 22.0);
     match shown {
         Some(inst) => {
             ui::item_card(d, assets, title, inst, affixes, 252.0, None, |_| {});
@@ -444,10 +448,17 @@ fn details(d: &mut ChildSpawnerCommands, assets: &AssetServer, title: &TitleFont
             }
         }
         None => {
-            d.spawn((Text::new("Click an item to select it. Each upgrade adds 5 % to all its stats."), text(15.0), TextColor(TEXT)));
+            // Nothing selected: the hero's numbers at the start of a run.
+            let (stats, hp, eq) = super::charstats::starting(profile, book, affixes);
+            d.spawn(Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, flex_basis: Val::Px(0.0), min_height: Val::Px(0.0), overflow: Overflow::scroll_y(), ..default() })
+                .insert(ScrollArea)
+                .with_children(|list| super::charstats::sheet(list, title, &stats, &hp, &eq, 236.0));
+            d.spawn((Text::new("Click an item to upgrade or recycle it."), text(13.0), TextColor(TEXT)));
         }
     }
-    d.spawn(Node { flex_grow: 1.0, ..default() });
+    if shown.is_some() {
+        d.spawn(Node { flex_grow: 1.0, ..default() });
+    }
     // Drop zone: recycle into gold.
     d.spawn((
         Node { height: Val::Px(84.0), flex_shrink: 0.0, column_gap: Val::Px(10.0), align_items: AlignItems::Center, justify_content: JustifyContent::Center, padding: UiRect::all(Val::Px(8.0)), ..default() },
@@ -474,10 +485,11 @@ fn refresh_details(
     title: Res<TitleFont>,
     profile: Res<Profile>,
     affixes: Res<AffixBook>,
+    book: Res<MasteryBook>,
     state: Res<InvState>,
     columns: Query<Entity, With<Details>>,
 ) {
     for column in &columns {
-        commands.entity(column).despawn_related::<Children>().with_children(|d| details(d, &assets, &title, &profile, &affixes, &state));
+        commands.entity(column).despawn_related::<Children>().with_children(|d| details(d, &assets, &title, &profile, &affixes, &book, &state));
     }
 }

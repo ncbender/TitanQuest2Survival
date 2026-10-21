@@ -296,7 +296,7 @@ fn show_page(
                 });
             });
         }
-        Page::Armory => inventory::build(&mut commands, &inventory::Ctx { assets: &assets, title: &title, profile: &profile, affixes: &affixes, state: &inv, preview: &preview }),
+        Page::Armory => inventory::build(&mut commands, &inventory::Ctx { assets: &assets, title: &title, profile: &profile, affixes: &affixes, state: &inv, preview: &preview, book: &book }),
         Page::Skills => skilltree::build(&mut commands, &assets, &title, &profile, &book, &view),
     }
 }
@@ -393,7 +393,13 @@ fn main_menu_input(
     }
 }
 
-fn show_pause(mut commands: Commands, title: Res<TitleFont>) {
+fn show_pause(
+    mut commands: Commands,
+    assets: Res<AssetServer>,
+    title: Res<TitleFont>,
+    stats: Res<super::player::HeroStats>,
+    hero: Query<(&super::Health, &super::equipment::Equipment), With<super::player::Hero>>,
+) {
     commands
         .spawn((
             Node {
@@ -410,12 +416,30 @@ fn show_pause(mut commands: Commands, title: Res<TitleFont>) {
             PauseUi,
         ))
         .with_children(|p| {
-            p.spawn((Text::new("Paused"), title.at(48.0)));
-            p.spawn((Text::new("Esc – resume     O – settings     M – main menu (loot and points are kept)"), text(22.0)));
+            p.spawn((Text::new("Paused"), title.at(44.0)));
+            // The character sheet with this run's numbers (level-up bonuses included).
+            if let Ok((hp, eq)) = hero.single() {
+                p.spawn(panel(&assets, Node { column_gap: Val::Px(28.0), align_items: AlignItems::FlexStart, ..default() })).with_children(|sheet| {
+                    for column in [0, 1] {
+                        sheet.spawn(Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(4.0), ..default() }).with_children(|c| {
+                            let sections = if column == 0 { 0..2 } else { 2..4 };
+                            super::charstats::sheet_part(c, &assets, &title, &stats, hp, eq, 290.0, sections);
+                        });
+                    }
+                });
+            }
+            p.spawn((Text::new("Esc / C – resume     O – settings     M – main menu (loot and points are kept)"), text(19.0)));
         });
 }
 
-fn pause_input(keys: Res<ButtonInput<KeyCode>>, state: Res<State<GameState>>, mut next: ResMut<NextState<GameState>>, mut settings_open: ResMut<SettingsOpen>) {
+fn pause_input(keys: Res<ButtonInput<KeyCode>>, state: Res<State<GameState>>, run: Res<super::Run>, mut next: ResMut<NextState<GameState>>, mut settings_open: ResMut<SettingsOpen>) {
+    // Test hook: TQ2_TEST_PAUSE=<s> opens the pause screen after s seconds of a run.
+    if let Some(t) = std::env::var("TQ2_TEST_PAUSE").ok().and_then(|v| v.parse::<f32>().ok()) {
+        if *state.get() == GameState::Playing && run.time >= t && run.time < t + 0.5 {
+            next.set(GameState::Paused);
+            return;
+        }
+    }
     if settings_open.0 && *state.get() == GameState::Paused {
         if keys.just_pressed(KeyCode::Escape) {
             settings_open.0 = false;
@@ -423,7 +447,8 @@ fn pause_input(keys: Res<ButtonInput<KeyCode>>, state: Res<State<GameState>>, mu
         return;
     }
     match state.get() {
-        GameState::Playing if keys.just_pressed(KeyCode::Escape) => next.set(GameState::Paused),
+        GameState::Playing if keys.just_pressed(KeyCode::Escape) || keys.just_pressed(KeyCode::KeyC) => next.set(GameState::Paused),
+        GameState::Paused if keys.just_pressed(KeyCode::KeyC) => next.set(GameState::Playing),
         GameState::Paused if keys.just_pressed(KeyCode::Escape) => next.set(GameState::Playing),
         GameState::Paused | GameState::GameOver if keys.just_pressed(KeyCode::KeyM) => next.set(GameState::MainMenu),
         _ => {}
