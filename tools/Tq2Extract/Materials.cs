@@ -131,7 +131,7 @@ class MaterialLibrary(DefaultFileProvider provider, string outDir)
             scl.GetValueOrDefault("UV Scale", 1f), alpha, cutoff ?? 0.3333f, twoSided ?? false, string.Join(" > ", chain));
         if (Overrides.TryGetValue(name, out var o))
         {
-            string? Tex(string? asset) => asset == null ? null
+            string? Tex(string? asset) => asset is null or "none" ? null
                 : Export(packagesByName[asset].Select(p => provider.LoadPackage(p).GetExports().OfType<UTexture>().FirstOrDefault()).FirstOrDefault(t => t != null), o.slice);
             def = def with
             {

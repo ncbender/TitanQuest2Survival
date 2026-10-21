@@ -34,6 +34,9 @@ pub mod content {
 
     pub const BOLT: &str = "props/TQ2/Content/TQ2/Character/Abilities/Forge_Sentry_01/sm_forge_sentry_projectile_01.glb";
     pub const SHARD: &str = "props/TQ2/Content/TQ2/Character/Crafting/In_World/Mystical_Shards/sm_mystic_shards.glb";
+    /// Forge Call ability ring (TQ2) used as the Nova shockwave; outer radius in metres.
+    pub const NOVA_RING: &str = "props/TQ2/Content/TQ2/Character/Abilities/Forge_Call_01/sm_forge_call_ring_outer.glb";
+    pub const NOVA_RING_RADIUS: f32 = 0.16;
 
     /// Export folders whose materials.json the game loads.
     pub const MATERIAL_DIRS: &[&str] = &["hero", "boarman", "props"];
@@ -44,7 +47,7 @@ pub mod config {
     pub const RUN_SECONDS: f32 = 600.0;
     pub const PLAYER_HP: f32 = 100.0;
     pub const PLAYER_SPEED: f32 = 6.0;
-    pub const PICKUP_RADIUS: f32 = 2.5;
+    pub const PICKUP_RADIUS: f32 = 3.5;
 
     pub const SPAWN_RING: (f32, f32) = (22.0, 30.0);
     pub const MAX_ENEMIES: usize = 400;
@@ -115,8 +118,11 @@ impl Plugin for SurvivorsPlugin {
     }
 }
 
-fn start_run(mut commands: Commands, mut run: ResMut<Run>, arena: Res<Arena>) {
+fn start_run(mut commands: Commands, mut run: ResMut<Run>, mut stats: ResMut<player::HeroStats>, arena: Res<Arena>) {
     *run = Run { level: 1, xp_next: progression::xp_for_level(1), ..default() };
+    if std::env::var_os("TQ2_TEST_NOVA").is_some() {
+        stats.nova_level = 1; // test hook: Nova from the start
+    }
     player::spawn_hero(&mut commands, arena.start);
 }
 
@@ -124,13 +130,14 @@ fn start_run(mut commands: Commands, mut run: ResMut<Run>, arena: Res<Arena>) {
 fn follow_ground(
     time: Res<Time>,
     ground: Res<Ground>,
-    mut units: Query<(&Pos, Option<&Vel>, &mut Transform), With<Health>>,
+    mut units: Query<(&Pos, Option<&Vel>, &Radius, &mut Transform), With<Health>>,
 ) {
-    for (pos, vel, mut t) in &mut units {
-        t.translation = Vec3::new(pos.0.x, ground.stand(pos.0), pos.0.y);
-        if let Some(v) = vel.filter(|v| v.0.length_squared() > 0.01) {
-            // TQ2 meshes face +X in their own space after export.
-            let target = Quat::from_rotation_y(f32::atan2(-v.0.y, v.0.x));
+    for (pos, vel, radius, mut t) in &mut units {
+        // Highest ground under the feet, so feet never sink into a slope.
+        t.translation = Vec3::new(pos.0.x, ground.stand_area(pos.0, radius.0 * 0.6), pos.0.y);
+        if let Some(v) = vel.filter(|v| v.0.length_squared() > 1e-6) {
+            // Exported TQ2 characters face +Z (toe bones lie at +Z in the bind pose).
+            let target = Quat::from_rotation_y(f32::atan2(v.0.x, v.0.y));
             t.rotation = t.rotation.slerp(target, (12.0 * time.delta_secs()).min(1.0));
         }
     }

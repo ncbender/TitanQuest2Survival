@@ -6,6 +6,8 @@ using CUE4Parse.UE4.Assets.Exports.Component.StaticMesh;
 using CUE4Parse.UE4.Assets.Exports.StaticMesh;
 using CUE4Parse.UE4.Objects.Core.Math;
 using CUE4Parse.UE4.Objects.UObject;
+using CUE4Parse.UE4.Assets.Objects;
+using CUE4Parse.UE4.Objects.PhysicsEngine;
 using CUE4Parse_Conversion;
 using CUE4Parse_Conversion.Options;
 using Newtonsoft.Json;
@@ -13,10 +15,11 @@ using SharpGLTF.Schema2;
 
 // Exports a map as one .glb per unique static mesh plus scene.json listing every
 // placement (static mesh components, instanced/foliage instances, level instances)
-// already converted to Bevy space (Y-up, right-handed, metres).
+// already converted to Bevy space (Y-up, right-handed, metres), plus colliders.json with
+// each mesh's original UE simple collision (boxes, spheres, capsules, convex hulls).
 static class SceneExport
 {
-    record Placement(string Mesh, Matrix4x4 Ue);
+    record Placement(string Mesh, Matrix4x4 Ue, bool Collides = true);
 
     public static async Task Run(DefaultFileProvider provider, string cache, string name, string mapPath)
     {
@@ -64,10 +67,17 @@ static class SceneExport
                 t = new[] { t.X * 0.01f, t.Z * 0.01f, t.Y * 0.01f },
                 r = new[] { q.X, q.Z, q.Y, -q.W },
                 s = new[] { s.X, s.Z, s.Y },
+                c = p.Collides,
             });
         }
         File.WriteAllText(Path.Combine(outDir, "scene.json"), JsonConvert.SerializeObject(new { map = mapPath, instances }));
         Console.WriteLine($"wrote {outDir}/scene.json: {instances.Count} instances, {meshFiles.Count} meshes");
+
+        var colliders = meshes.Where(m => m.Value is UStaticMesh && meshFiles.ContainsKey(m.Key))
+            .Select(m => (file: meshFiles[m.Key], shapes: Colliders((UStaticMesh)m.Value)))
+            .Where(c => c.shapes.Count > 0).ToDictionary(c => c.file, c => c.shapes);
+        File.WriteAllText(Path.Combine(outDir, "colliders.json"), JsonConvert.SerializeObject(colliders));
+        Console.WriteLine($"wrote colliders.json: {colliders.Count}/{meshFiles.Count} meshes have collision, {placements.Count(p => !p.Collides)} placements opt out");
 
         var landscapes = placements.Where(p => meshes[p.Mesh] is not UStaticMesh && meshFiles.ContainsKey(p.Mesh))
             .Select(p => (Path.Combine(outDir, meshFiles[p.Mesh]), ToBevy(p.Ue))).ToList();
@@ -144,14 +154,15 @@ static class SceneExport
                         var mesh = Mesh(ism, meshes);
                         if (mesh == null) break;
                         var comp = ToMatrix(ism.GetAbsoluteTransform()) * parent;
+                        var collides = CollisionOn(ism);
                         foreach (var inst in ism.GetInstances() ?? [])
-                            placements.Add(new(mesh, ToMatrix(inst.TransformData) * comp));
+                            placements.Add(new(mesh, ToMatrix(inst.TransformData) * comp, collides));
                         break;
                     }
                     case UStaticMeshComponent smc:
                     {
                         var mesh = Mesh(smc, meshes);
-                        if (mesh != null) placements.Add(new(mesh, ToMatrix(smc.GetAbsoluteTransform()) * parent));
+                        if (mesh != null) placements.Add(new(mesh, ToMatrix(smc.GetAbsoluteTransform()) * parent, CollisionOn(smc)));
                         break;
                     }
                     case USceneComponent sc when e.ExportType == "LevelInstanceComponent":
@@ -178,6 +189,52 @@ static class SceneExport
             }
             catch (Exception ex) { Console.WriteLine($"  skip {e.ExportType} {e.Name}: {ex.GetType().Name} {ex.Message}"); }
         }
+    }
+
+    static readonly string[] NoCollisionProfiles = ["NoCollision", "OverlapAll", "OverlapAllDynamic", "Trigger", "UI"];
+
+    /// A component can switch its mesh's collision off (common for decorative foliage).
+    static bool CollisionOn(UObject component)
+    {
+        var body = component.GetOrDefault<FStructFallback>("BodyInstance");
+        if (body == null) return true;
+        if (body.GetOrDefault<FName>("CollisionEnabled").Text == "ECollisionEnabled::NoCollision") return false;
+        return !NoCollisionProfiles.Contains(body.GetOrDefault<FName>("CollisionProfileName").Text);
+    }
+
+    /// The mesh's simple collision as point sets in Bevy-space mesh coordinates; spheres and
+    /// capsules carry a radius (the shape is the hull of the points inflated by it).
+    static List<object> Colliders(UStaticMesh mesh)
+    {
+        var shapes = new List<object>();
+        var body = mesh.BodySetup?.Load<UBodySetup>();
+        if (body?.AggGeom == null) return shapes;
+        var profile = body.GetOrDefault<FStructFallback>("DefaultInstance")?.GetOrDefault<FName>("CollisionProfileName").Text;
+        if (profile != null && NoCollisionProfiles.Contains(profile)) return shapes;
+        var agg = body.AggGeom;
+
+        static float[] B(FVector v) => [(float)v.X * 0.01f, (float)v.Z * 0.01f, (float)v.Y * 0.01f];
+        void Add(IEnumerable<FVector> points, float radius) =>
+            shapes.Add(new { points = points.Select(B).ToArray(), radius = radius * 0.01f });
+
+        foreach (var box in agg.BoxElems ?? [])
+        {
+            var q = box.Rotation.Quaternion();
+            var h = new FVector(box.X, box.Y, box.Z) * 0.5f;
+            Add(from sx in new[] { -1, 1 } from sy in new[] { -1, 1 } from sz in new[] { -1, 1 }
+                select box.Center + q.RotateVector(new FVector(h.X * sx, h.Y * sy, h.Z * sz)), 0);
+        }
+        foreach (var sphere in agg.SphereElems ?? [])
+            Add([sphere.Center], sphere.Radius);
+        foreach (var capsule in agg.SphylElems ?? [])
+        {
+            // UE capsules run along their local Z axis.
+            var axis = capsule.Rotation.Quaternion().RotateVector(new FVector(0, 0, 1)) * (capsule.Length * 0.5f);
+            Add([capsule.Center + axis, capsule.Center - axis], capsule.Radius);
+        }
+        foreach (var convex in agg.ConvexElems ?? [])
+            Add((convex.VertexData ?? []).Select(v => convex.Transform.TransformPosition(v)), 0);
+        return shapes;
     }
 
     static string? Mesh(UStaticMeshComponent c, Dictionary<string, UObject> meshes)

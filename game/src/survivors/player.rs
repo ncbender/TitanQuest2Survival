@@ -6,9 +6,12 @@ use super::content::{HERO_IDLE, HERO_PARTS, HERO_RUN};
 use super::{config, GameState, Health, Pos, Radius, RunEntity, Vel};
 use crate::character::{attach_parts, CharacterAnim};
 use crate::ground::Ground;
+use crate::obstacles::Obstacles;
 
 #[derive(Component)]
 pub struct Hero;
+
+const HERO_RADIUS: f32 = 0.45;
 
 /// Everything upgrades can change. Multipliers start at 1.
 #[derive(Resource, Clone)]
@@ -43,7 +46,7 @@ pub fn spawn_hero(commands: &mut Commands, at: Vec2) {
             RunEntity,
             Pos(at),
             Vel::default(),
-            Radius(0.5),
+            Radius(HERO_RADIUS),
             Health { hp: config::PLAYER_HP, max: config::PLAYER_HP },
             CharacterAnim::looping(HERO_IDLE),
             Transform::default(),
@@ -58,6 +61,7 @@ fn move_hero(
     keys: Res<ButtonInput<KeyCode>>,
     stats: Res<HeroStats>,
     ground: Res<Ground>,
+    obstacles: Res<Obstacles>,
     rig: Query<&CameraRig>,
     mut hero: Query<(&mut Pos, &mut Vel), With<Hero>>,
 ) {
@@ -74,7 +78,8 @@ fn move_hero(
     vel.0 = dir * config::PLAYER_SPEED * stats.speed;
     let next = pos.0 + vel.0 * time.delta_secs();
     let b = ground.bounds();
-    pos.0 = next.clamp(b.min + 2.0, b.max - 2.0);
+    let next = ground.clamp_move(pos.0, next.clamp(b.min + 2.0, b.max - 2.0));
+    pos.0 = obstacles.resolve(next, HERO_RADIUS, ground.stand(next));
 }
 
 fn animate_hero(mut hero: Query<(&Vel, &mut CharacterAnim), With<Hero>>) {

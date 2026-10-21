@@ -4,9 +4,11 @@
 //! keys: WASD move, Q/E rotate camera, mouse wheel / R-F zoom, 1-3 pick upgrade, R restart
 //! env TQ2_SCREENSHOT=<path>: save a screenshot after TQ2_SCREENSHOT_DELAY s (default 4) and exit
 //! env TQ2_AUTOPLAY=1: the hero runs in circles by itself (automated tests, benchmarks)
+//! env TQ2_TEST_NOVA=1: start with Nova unlocked
 //! env TQ2_BENCH=<n>: spawn n enemies, measure 10 s of frame times into cache/bench.txt, exit
 mod character;
 mod ground;
+mod obstacles;
 mod survivors;
 mod tq2_materials;
 mod tq2_scene;
@@ -45,19 +47,21 @@ fn load_world(app: &mut App, scene: &str) {
         library.load_dir(EXPORT_ROOT, dir);
     }
     let mut commands = world.commands();
-    let info = tq2_scene::spawn_scene(&mut commands, &assets, EXPORT_ROOT, scene);
+    let mut info = tq2_scene::spawn_scene(&mut commands, &assets, EXPORT_ROOT, scene);
     world.flush();
 
     let water = info.as_ref().and_then(|i| i.water);
+    let obstacles = info.as_mut().map(|i| std::mem::take(&mut i.obstacles)).unwrap_or_default();
     let ground = Ground::load(&format!("{EXPORT_ROOT}/{scene}/ground.json"), water).unwrap_or_else(Ground::flat);
     let center = info.map(|i| Vec2::new(i.center.x, i.center.z)).unwrap_or_default();
     // Spiral outwards from the map centre until we stand on land.
     let start = (0..400)
         .map(|i| center + Vec2::from_angle(i as f32 * 0.7) * (i as f32 * 0.25))
-        .find(|p| ground.is_land(*p))
+        .find(|p| ground.is_land(*p) && obstacles.resolve(*p, 0.6, ground.stand(*p)) == *p)
         .unwrap_or(center);
     info!("start at {start}");
     world.insert_resource(ground);
+    world.insert_resource(obstacles);
     world.insert_resource(Arena { start });
 }
 

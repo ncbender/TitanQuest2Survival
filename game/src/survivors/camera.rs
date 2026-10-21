@@ -21,7 +21,12 @@ fn spawn_camera(mut commands: Commands) {
     commands.spawn((
         Camera3d::default(),
         Transform::default(),
-        CameraRig { yaw: 0.6, pitch: 0.95, distance: 24.0, focus: Vec3::ZERO },
+        CameraRig {
+            yaw: 0.6,
+            pitch: 0.95,
+            distance: std::env::var("TQ2_ZOOM").ok().and_then(|z| z.parse().ok()).unwrap_or(24.0),
+            focus: Vec3::ZERO,
+        },
     ));
     commands.spawn((
         DirectionalLight { illuminance: 11000.0, shadow_maps_enabled: true, ..default() },

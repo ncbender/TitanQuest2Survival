@@ -1,12 +1,13 @@
 //! Hero attacks (auto-aimed bolts, Nova), damage, deaths and XP drops.
 use bevy::prelude::*;
 
-use super::content::{BOLT, SHARD};
+use super::content::{BOLT, NOVA_RING, NOVA_RING_RADIUS, SHARD};
 use super::enemies::{Enemy, EnemyGrid};
 use super::player::{Hero, HeroStats};
 use super::progression::XpShard;
 use super::{GameState, Health, Pos, Run, RunEntity};
 use crate::ground::Ground;
+use crate::obstacles::Obstacles;
 
 #[derive(Component)]
 pub struct Projectile {
@@ -34,12 +35,6 @@ struct Weapons {
     nova_timer: f32,
 }
 
-#[derive(Resource)]
-struct NovaVisual {
-    mesh: Handle<Mesh>,
-    material: Handle<StandardMaterial>,
-}
-
 const BOLT_COOLDOWN: f32 = 0.9;
 const BOLT_DAMAGE: f32 = 10.0;
 const BOLT_SPEED: f32 = 22.0;
@@ -50,7 +45,6 @@ const NOVA_RADIUS: f32 = 4.0;
 
 pub fn plugin(app: &mut App) {
     app.init_resource::<Weapons>()
-        .add_systems(Startup, setup_nova_visual)
         .add_systems(
             FixedUpdate,
             (fire_bolts, fire_nova, move_projectiles, kill_dead, check_game_over)
@@ -105,8 +99,8 @@ fn fire_bolts(
 fn fire_nova(
     mut commands: Commands,
     time: Res<Time>,
+    assets: Res<AssetServer>,
     stats: Res<HeroStats>,
-    visual: Res<NovaVisual>,
     mut weapons: ResMut<Weapons>,
     grid: Res<EnemyGrid>,
     hero: Query<&Pos, With<Hero>>,
@@ -132,8 +126,7 @@ fn fire_nova(
         NovaRing { age: 0.0, radius },
         RunEntity,
         Pos(hero.0),
-        Mesh3d(visual.mesh.clone()),
-        MeshMaterial3d(visual.material.clone()),
+        WorldAssetRoot(assets.load(GltfAssetLabel::Scene(0).from_asset(NOVA_RING))),
         Transform::default(),
     ));
 }
@@ -142,6 +135,8 @@ fn move_projectiles(
     mut commands: Commands,
     time: Res<Time>,
     grid: Res<EnemyGrid>,
+    ground: Res<Ground>,
+    obstacles: Res<Obstacles>,
     mut projectiles: Query<(Entity, &mut Pos, &mut Projectile)>,
     mut enemies: Query<&mut Health, With<Enemy>>,
 ) {
@@ -149,7 +144,8 @@ fn move_projectiles(
     for (e, mut pos, mut p) in &mut projectiles {
         pos.0 += p.vel * dt;
         p.life -= dt;
-        let mut done = p.life <= 0.0;
+        // Bolts fly at chest height and stop at rocks, walls and trees.
+        let mut done = p.life <= 0.0 || obstacles.hits(pos.0, ground.stand(pos.0) + 1.2);
         if !done {
             let hits: Vec<Entity> = grid.near(pos.0, 0.4).map(|(e, _, _)| e).filter(|e| !p.hit.contains(e)).collect();
             for target in hits {
@@ -229,20 +225,6 @@ fn fade_dying(mut commands: Commands, time: Res<Time>, mut q: Query<(Entity, &mu
     }
 }
 
-// TEMPORARY visual: Nova uses a plain emissive torus until TQ2 Niagara effects are imported.
-fn setup_nova_visual(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, mut materials: ResMut<Assets<StandardMaterial>>) {
-    commands.insert_resource(NovaVisual {
-        mesh: meshes.add(Torus::new(0.9, 1.0)),
-        material: materials.add(StandardMaterial {
-            base_color: Color::srgba(0.4, 0.8, 1.0, 0.5),
-            emissive: LinearRgba::rgb(1.0, 3.0, 6.0),
-            alpha_mode: AlphaMode::Add,
-            unlit: true,
-            ..default()
-        }),
-    });
-}
-
 fn animate_nova(
     mut commands: Commands,
     time: Res<Time>,
@@ -251,10 +233,13 @@ fn animate_nova(
 ) {
     for (e, pos, mut ring, mut t) in &mut q {
         ring.age += time.delta_secs();
+        // The TQ2 Forge Call ring sweeps out to the Nova radius while spinning.
         let k = (ring.age / 0.35).min(1.0);
-        t.translation = Vec3::new(pos.0.x, ground.stand(pos.0) + 0.3, pos.0.y);
-        t.scale = Vec3::new(ring.radius * k, 1.0, ring.radius * k);
-        if ring.age > 0.45 {
+        let scale = ring.radius / NOVA_RING_RADIUS * k;
+        t.translation = Vec3::new(pos.0.x, ground.stand(pos.0) + 0.4, pos.0.y);
+        t.scale = Vec3::new(scale, scale * 0.5, scale);
+        t.rotation = Quat::from_rotation_y(ring.age * 12.0);
+        if ring.age > 0.5 {
             commands.entity(e).despawn();
         }
     }

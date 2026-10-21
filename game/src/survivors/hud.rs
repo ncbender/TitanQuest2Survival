@@ -96,7 +96,7 @@ fn panel(marker: impl Component) -> impl Bundle {
 
 fn show_level_up(mut commands: Commands, offer: Res<Offer>, stats: Res<HeroStats>, run: Res<Run>) {
     commands.spawn(panel(LevelUpPanel)).with_children(|p| {
-        p.spawn((Text::new(format!("Stufe {} erreicht – wähle (1–3)", run.level)), TextFont { font_size: FontSize::Px(32.0), ..default() }));
+        p.spawn((Text::new(format!("Stufe {} erreicht - wähle (1-3)", run.level)), TextFont { font_size: FontSize::Px(32.0), ..default() }));
         for (i, upgrade) in offer.0.iter().enumerate() {
             p.spawn((
                 Node { width: Val::Px(560.0), padding: UiRect::all(Val::Px(14.0)), ..default() },
@@ -119,7 +119,9 @@ fn choose_upgrade(
 ) {
     let keys_pick = [KeyCode::Digit1, KeyCode::Digit2, KeyCode::Digit3].iter().position(|k| keys.just_pressed(*k));
     let click_pick = clicked.0.take();
-    let Some(choice) = keys_pick.or(click_pick).and_then(|i| offer.0.get(i)) else { return };
+    // Test driver picks the first offer.
+    let auto_pick = std::env::var_os("TQ2_AUTOPLAY").map(|_| 0);
+    let Some(choice) = keys_pick.or(click_pick).or(auto_pick).and_then(|i| offer.0.get(i)) else { return };
     if let Ok(mut hp) = hero.single_mut() {
         choice.apply(&mut stats, &mut hp);
     }
@@ -131,7 +133,7 @@ fn show_end(mut commands: Commands, run: Res<Run>) {
     commands.spawn(panel(EndPanel)).with_children(|p| {
         p.spawn((Text::new(title), TextFont { font_size: FontSize::Px(40.0), ..default() }));
         p.spawn((
-            Text::new(format!("Stufe {}   Besiegt: {}   Zeit {:02}:{:02}\n\nR – Neustart", run.level, run.kills, run.time as u32 / 60, run.time as u32 % 60)),
+            Text::new(format!("Stufe {}   Besiegt: {}   Zeit {:02}:{:02}\n\nR - Neustart", run.level, run.kills, run.time as u32 / 60, run.time as u32 % 60)),
             TextFont { font_size: FontSize::Px(24.0), ..default() },
         ));
     });

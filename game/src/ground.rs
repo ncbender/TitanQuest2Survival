@@ -56,6 +56,27 @@ impl Ground {
         self.water.map_or(t, |w| t.max(w))
     }
 
+    /// Highest standing height over a small disc (centre + 4 points at `r`).
+    pub fn stand_area(&self, p: Vec2, r: f32) -> f32 {
+        [Vec2::ZERO, Vec2::X, Vec2::NEG_X, Vec2::Y, Vec2::NEG_Y]
+            .iter()
+            .map(|d| self.stand(p + *d * r))
+            .fold(f32::MIN, f32::max)
+    }
+
+    /// Shallow water is wadeable; deeper water blocks movement.
+    pub fn walkable(&self, p: Vec2) -> bool {
+        self.water.is_none_or(|w| self.terrain(p) > w - 0.5)
+    }
+
+    /// Moves from `from` towards `to`, sliding along the shore instead of entering deep water.
+    pub fn clamp_move(&self, from: Vec2, to: Vec2) -> Vec2 {
+        [to, Vec2::new(to.x, from.y), Vec2::new(from.x, to.y)]
+            .into_iter()
+            .find(|p| self.walkable(*p))
+            .unwrap_or(from)
+    }
+
     pub fn is_land(&self, p: Vec2) -> bool {
         self.water.is_none_or(|w| self.terrain(p) > w + 0.15)
     }

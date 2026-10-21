@@ -7,6 +7,7 @@ use super::player::Hero;
 use super::{config, GameState, Health, Pos, Radius, Run, RunEntity, Vel};
 use crate::character::{attach_parts, CharacterAnim};
 use crate::ground::Ground;
+use crate::obstacles::Obstacles;
 
 #[derive(Component)]
 pub struct Enemy {
@@ -74,6 +75,7 @@ fn spawn_waves(
     time: Res<Time>,
     run: Res<Run>,
     ground: Res<Ground>,
+    obstacles: Res<Obstacles>,
     mut director: ResMut<Director>,
     hero: Query<&Pos, With<Hero>>,
     enemies: Query<(), With<Enemy>>,
@@ -91,7 +93,7 @@ fn spawn_waves(
 
     if director.bosses_spawned < config::BOSS_TIMES.len() && t >= config::BOSS_TIMES[director.bosses_spawned] {
         director.bosses_spawned += 1;
-        if let Some(p) = ring_point(&ground, hero.0) {
+        if let Some(p) = ring_point(&ground, &obstacles, hero.0) {
             spawn_boarman(&mut commands, p, 40.0 * config::ENEMY_HP * scale, 3.0 * config::ENEMY_DAMAGE, 0.8, 50, 2.2, true);
         }
     }
@@ -103,7 +105,7 @@ fn spawn_waves(
     director.spawn_timer = interval;
     let alive = enemies.iter().count();
     for i in 0..per_wave.min(cap.saturating_sub(alive)) {
-        let Some(p) = ring_point(&ground, hero.0) else { continue };
+        let Some(p) = ring_point(&ground, &obstacles, hero.0) else { continue };
         // Every 15th spawn after the first minute is an elite.
         let elite = t > 60.0 && (run.kills as usize + alive + i) % 15 == 0;
         let (hp, size, xp) = if elite { (6.0, 1.45, 5) } else { (1.0, 1.0, 1) };
@@ -111,14 +113,14 @@ fn spawn_waves(
     }
 }
 
-/// A random point on the spawn ring that is on land.
-fn ring_point(ground: &Ground, center: Vec2) -> Option<Vec2> {
+/// A random point on the spawn ring that is on land and not inside an obstacle.
+fn ring_point(ground: &Ground, obstacles: &Obstacles, center: Vec2) -> Option<Vec2> {
     let b = ground.bounds();
     (0..12).find_map(|_| {
         let angle = fastrand::f32() * std::f32::consts::TAU;
         let dist = config::SPAWN_RING.0 + fastrand::f32() * (config::SPAWN_RING.1 - config::SPAWN_RING.0);
         let p = center + Vec2::from_angle(angle) * dist;
-        (b.contains(p) && ground.is_land(p)).then_some(p)
+        (b.contains(p) && ground.is_land(p) && obstacles.resolve(p, 1.0, ground.stand(p)) == p).then_some(p)
     })
 }
 
@@ -149,6 +151,8 @@ fn spawn_boarman(commands: &mut Commands, at: Vec2, hp: f32, damage: f32, speed_
 fn chase_and_attack(
     time: Res<Time>,
     grid: Res<EnemyGrid>,
+    ground: Res<Ground>,
+    obstacles: Res<Obstacles>,
     mut hero: Query<(&Pos, &mut Health), (With<Hero>, Without<Enemy>)>,
     mut enemies: Query<(Entity, &mut Pos, &mut Vel, &Radius, &mut Enemy, &mut CharacterAnim), Without<Hero>>,
 ) {
@@ -186,6 +190,7 @@ fn chase_and_attack(
                 *anim = CharacterAnim::looping(BOARMAN_RUN);
             }
         }
-        pos.0 += (vel.0 + push * 4.0) * dt;
+        let next = ground.clamp_move(pos.0, pos.0 + (vel.0 + push * 4.0) * dt);
+        pos.0 = obstacles.resolve(next, radius.0, ground.stand(next));
     }
 }

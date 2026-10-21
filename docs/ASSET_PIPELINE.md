@@ -83,6 +83,19 @@ dotnet run --project tools/UsmapDumper -c Release
 - Mane / arm hair are separate skeletal meshes, not yet attached.
 - ACL-compressed animations need `CUE4Parse-Natives.dll` (build from source).
 
+## Collision
+
+`scene` also writes `colliders.json`: every mesh's original UE simple collision from its
+`BodySetup.AggGeom` (boxes, spheres, capsules, convex hulls) in Bevy mesh space. Meshes whose
+profile is `NoCollision`/overlap-only get none (grass, flowers), and placements whose component
+disables collision are marked `c: false` in `scene.json` (705 of 2,906 in menu2). The game
+flattens each shape to a convex footprint and only blocks between knee and head height.
+
+## Orientation
+
+Exported TQ2 characters face +Z in Bevy space (toe bones of humans and Boarmen lie at +Z in the
+bind pose); yaw for a ground velocity (x, z) is `atan2(x, z)`.
+
 ## Materials
 
 Grim materials are chains, e.g. `mi_rock_greek_boulder_01a > mi_rock_greek_00a >

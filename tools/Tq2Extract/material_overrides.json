@@ -1,9 +1,35 @@
 {
-  "_comment": "Materials whose look TQ2 assigns at runtime (archetypes: skin, hair colour) or that are proxies. Texture values are TQ2 texture asset names; colour is linear RGBA.",
-  "mi_human_male_body": { "albedo": "t_human_male_body_a", "normal": "t_human_male_body_nm" },
-  "mi_human_male_head": { "albedo": "t_human_male_head_a", "normal": "t_human_male_head_nm" },
-  "mi_human_eyelashes_01": { "albedo": "t_human_male_eyelashes_a" },
-  "mi_human_hair_smooth": { "color": [0.07, 0.045, 0.03, 1.0] },
-  "mi_boarman_hair_smooth": { "color": [0.09, 0.07, 0.06, 1.0] },
-  "mi_proxy_cloth_torso": { "hidden": true }
+  "_comment": "Materials whose look TQ2 assigns at runtime (archetypes: skin, hair colour) or that are proxies. Texture values are TQ2 texture asset names (\"none\" removes the texture); colour is linear RGBA.",
+  "mi_human_male_body": {
+    "albedo": "t_human_male_body_a",
+    "normal": "t_human_male_body_nm"
+  },
+  "mi_human_male_head": {
+    "albedo": "t_human_male_head_a",
+    "normal": "t_human_male_head_nm"
+  },
+  "mi_human_eyelashes_01": {
+    "albedo": "t_human_male_eyelashes_a"
+  },
+  "mi_human_hair_smooth": {
+    "color": [
+      0.07,
+      0.045,
+      0.03,
+      1.0
+    ],
+    "albedo": "none"
+  },
+  "mi_boarman_hair_smooth": {
+    "color": [
+      0.09,
+      0.07,
+      0.06,
+      1.0
+    ],
+    "albedo": "none"
+  },
+  "mi_proxy_cloth_torso": {
+    "hidden": true
+  }
 }

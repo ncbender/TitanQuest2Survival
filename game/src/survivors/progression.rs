@@ -48,7 +48,7 @@ impl Upgrade {
             Upgrade::Crit => "Kritisches Auge: +8 % Krit-Chance".into(),
             Upgrade::Vitality => "Vitalität: +20 max. Leben, volle Heilung".into(),
             Upgrade::Magnet => "Anziehung: +50 % Sammelradius".into(),
-            Upgrade::Nova if stats.nova_level == 0 => "Neue Fähigkeit – Nova: Schockwelle um dich herum".into(),
+            Upgrade::Nova if stats.nova_level == 0 => "Neue Fähigkeit - Nova: Schockwelle um dich herum".into(),
             Upgrade::Nova => format!("Nova Stufe {}: mehr Schaden, Radius, Tempo", stats.nova_level + 1),
         }
     }
@@ -88,7 +88,8 @@ impl Upgrade {
 pub struct Offer(pub Vec<Upgrade>);
 
 pub fn xp_for_level(level: u32) -> u32 {
-    5 + level * 4 + level * level / 3
+    // 6, 10, 14, 19, … - the first level-up comes within the first half minute.
+    2 + level * 4 + level * level / 3
 }
 
 pub fn plugin(app: &mut App) {
@@ -132,9 +133,14 @@ fn collect_shards(
     }
 }
 
-fn make_offer(mut offer: ResMut<Offer>, stats: Res<HeroStats>) {
+fn make_offer(mut offer: ResMut<Offer>, stats: Res<HeroStats>, run: Res<Run>) {
     let mut pool: Vec<Upgrade> = Upgrade::ALL.into_iter().filter(|u| u.available(&stats)).collect();
     fastrand::shuffle(&mut pool);
+    // The first level-up always offers the second ability so every run can find it.
+    if run.level == 2 && stats.nova_level == 0 {
+        pool.retain(|u| *u != Upgrade::Nova);
+        pool.insert(0, Upgrade::Nova);
+    }
     offer.0 = pool.into_iter().take(3).collect();
 }
 
