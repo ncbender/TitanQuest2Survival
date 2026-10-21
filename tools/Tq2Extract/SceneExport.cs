@@ -22,9 +22,9 @@ static class SceneExport
     {
         var outDir = Path.Combine(cache, "export", name);
         var placements = new List<Placement>();
-        var meshes = new Dictionary<string, UStaticMesh>();
+        var meshes = new Dictionary<string, UObject>(); // static meshes and landscape actors
         CollectLevel(provider, mapPath, Matrix4x4.Identity, placements, meshes, 0);
-        Console.WriteLine($"{placements.Count} placements of {meshes.Count} unique static meshes");
+        Console.WriteLine($"{placements.Count} placements of {meshes.Count} unique meshes ({meshes.Values.Count(m => m is not UStaticMesh)} landscapes)");
 
         // Export each unique mesh (+ its materials/textures) with CUE4Parse.
         var rawDir = Path.Combine(outDir, "raw");
@@ -71,7 +71,7 @@ static class SceneExport
     }
 
     static void CollectLevel(DefaultFileProvider provider, string mapPath, Matrix4x4 parent,
-        List<Placement> placements, Dictionary<string, UStaticMesh> meshes, int depth)
+        List<Placement> placements, Dictionary<string, UObject> meshes, int depth)
     {
         if (depth > 8) return;
         IEnumerable<UObject> exports;
@@ -102,7 +102,15 @@ static class SceneExport
                     case USceneComponent sc when e.ExportType == "LevelInstanceComponent":
                         break; // handled through the owning actor below
                     default:
-                        if (e.ExportType.StartsWith("LevelInstance") && e.TryGetValue(out FSoftObjectPath world, "WorldAsset"))
+                        if (e.ExportType is "Landscape" or "LandscapeProxy" or "LandscapeStreamingProxy")
+                        {
+                            // Landscape glb is in actor-local space (1 unit per quad); place by the actor root.
+                            var root = e.GetOrDefault<FPackageIndex>("RootComponent")?.Load<USceneComponent>();
+                            var path = e.GetPathName();
+                            meshes.TryAdd(path, e);
+                            placements.Add(new(path, (root != null ? ToMatrix(root.GetAbsoluteTransform()) : Matrix4x4.Identity) * parent));
+                        }
+                        else if (e.ExportType.StartsWith("LevelInstance") && e.TryGetValue(out FSoftObjectPath world, "WorldAsset"))
                         {
                             var root = e.GetOrDefault<FPackageIndex>("RootComponent")?.Load<USceneComponent>();
                             var m = (root != null ? ToMatrix(root.GetAbsoluteTransform()) : Matrix4x4.Identity) * parent;
@@ -117,7 +125,7 @@ static class SceneExport
         }
     }
 
-    static string? Mesh(UStaticMeshComponent c, Dictionary<string, UStaticMesh> meshes)
+    static string? Mesh(UStaticMeshComponent c, Dictionary<string, UObject> meshes)
     {
         var mesh = c.GetLoadedStaticMesh();
         if (mesh == null) return null;

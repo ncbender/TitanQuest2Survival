@@ -13,7 +13,7 @@
   placements (static, instanced, foliage, level instances); `MaterialLibrary` resolves Grim
   material chains into `materials.json` + shared textures; Bevy applies one shared material per
   TQ2 material. `l_main_menu_scene_02` (2,905 instances, 187 meshes, 102/104 materials textured)
-  renders with the animated Boarman (screenshot verified). Landscape not exported yet.
+  renders with the animated Boarman and its landscape (beach cove; screenshot verified). **Milestone 2 reached.** Terrain uses one layer texture; weight-blended layers TODO.
 
 ## Next
 

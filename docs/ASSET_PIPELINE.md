@@ -71,7 +71,7 @@ dotnet run --project tools/UsmapDumper -c Release
 | 6 | Skeletons | **Confirmed** | 64-joint skin in .glb; USkeleton has 92 bones (extra ones unused by this mesh) |
 | 7 | Animations | **Confirmed** (35/42 Boarman) | baked to glTF by `animate`; 4 additive skipped; 3 need ACL natives (`CUE4Parse-Natives` DLL missing) |
 | 8 | Materials / texture assignment | **Partial** | `MaterialLibrary` walks instance chains (+ root material referenced textures) → albedo/normal/ORM/alpha/two-sided; procedural Grim masters (rock gradients, ID tints) approximated |
-| 9 | Terrain / environment | **Partial** | static/instanced/foliage meshes + level instances placed via `scene`; landscape heightmaps decode, mesh not built yet; WP cells use FastGeoContainer (untested) |
+| 9 | Terrain / environment | **Partial** | static/instanced/foliage meshes + level instances placed via `scene`; landscape exported as glb (CUE4Parse LandscapeMeshExporter) and placed by actor root (scale 100 = 1 m/quad), single-layer material (layer blend TODO); WP cells use FastGeoContainer (untested) |
 | 10 | Load in standalone game | **Confirmed** | Bevy 0.20 renders the textured, animated Boarman Brute |
 
 ### Known gaps

@@ -80,7 +80,7 @@ switch (command)
                     // Animations are not exported here: CUE4Parse has no glTF animation
                     // writer, so the "animate" command bakes them into the mesh .glb.
                     foreach (var e in provider.LoadPackage(path).GetExports())
-                        if (e.ExportType is "SkeletalMesh" or "Texture2D" or "StaticMesh" or "World")
+                        if (e.ExportType is "SkeletalMesh" or "Texture2D" or "StaticMesh" or "World" or "Landscape" or "LandscapeStreamingProxy" or "LandscapeProxy")
                             session.Add(e);
                 }
                 catch (Exception ex) { Console.WriteLine($"  FAILED {path}: {ex.GetType().Name}: {ex.Message}"); }
