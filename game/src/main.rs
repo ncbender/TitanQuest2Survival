@@ -9,6 +9,7 @@
 //! env TQ2_TEST_UPGRADES=multishot,nova,…: apply upgrades at the start of a run
 //! env TQ2_TEST_GEAR=bow,ranger / TQ2_TEST_CHEST=1: start with gear / a chest next to the hero
 //! env TQ2_TEST_GALLERY=1: spawn one of every enemy type next to the hero
+//! env TQ2_MENU=1 / TQ2_MENU=hero: keep the main menu / open character creation (screenshots)
 //! env TQ2_BENCH=<n>: spawn n enemies, measure 10 s of frame times into cache/bench.txt, exit
 mod audio;
 mod character;
@@ -19,6 +20,7 @@ mod survivors;
 mod terrain;
 mod tq2_materials;
 mod tq2_scene;
+mod vfx;
 
 use bevy::prelude::*;
 use bevy::render::view::screenshot::{save_to_disk, Screenshot};
@@ -63,7 +65,7 @@ fn main() {
         file_path: root.clone(),
         ..default()
     }))
-    .add_plugins((tq2_materials::Tq2MaterialsPlugin, character::CharacterPlugin, audio::AudioPlugin))
+    .add_plugins((tq2_materials::Tq2MaterialsPlugin, character::CharacterPlugin, audio::AudioPlugin, vfx::VfxPlugin))
     .add_systems(Update, auto_screenshot);
 
     app.add_plugins(terrain::TerrainPlugin { export_root: root.clone(), scene: scene.clone() });

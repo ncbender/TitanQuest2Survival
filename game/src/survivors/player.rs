@@ -39,7 +39,7 @@ pub fn plugin(app: &mut App) {
         .add_systems(Update, animate_hero);
 }
 
-pub fn spawn_hero(commands: &mut Commands, at: Vec2) -> Entity {
+pub fn spawn_hero(commands: &mut Commands, at: Vec2, equipment: Equipment) -> Entity {
     let hero = commands
         .spawn((
             Hero,
@@ -49,8 +49,8 @@ pub fn spawn_hero(commands: &mut Commands, at: Vec2) -> Entity {
             Radius(HERO_RADIUS),
             Health { hp: config::PLAYER_HP, max: config::PLAYER_HP },
             // Parts, carried weapon and stance follow the equipment (see equipment.rs).
-            CharacterAnim::looping(Equipment::default().weapon.idle),
-            Equipment::default(),
+            CharacterAnim::looping(equipment.weapon.idle),
+            equipment,
             Transform::default(),
             Visibility::default(),
         ))

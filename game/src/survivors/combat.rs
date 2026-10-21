@@ -1,7 +1,8 @@
 //! Hero attacks (auto-aimed bolts, Nova), damage, deaths and XP drops.
 use bevy::prelude::*;
 
-use super::content::{ARROW, BOLT, NOVA_RING, NOVA_RING_RADIUS, SHARD};
+use super::content::{ARROW, NOVA_RING, NOVA_RING_RADIUS, SHARD};
+use crate::vfx::Flipbook;
 use super::equipment::{drop_chest, AttackKind, Equipment};
 use super::enemies::{Enemy, EnemyGrid};
 use super::player::{Hero, HeroStats};
@@ -18,6 +19,8 @@ pub struct Projectile {
     damage: f32,
     crit: bool,
     hit_sound: &'static str,
+    /// Fireballs explode where they hit.
+    explodes: bool,
     pierce: u32,
     life: f32,
     hit: Vec<Entity>,
@@ -99,6 +102,7 @@ fn auto_attack(
     hero: Query<(&Pos, &Equipment), With<Hero>>,
     mut enemies: Query<&mut Health, With<Enemy>>,
     mut hits: MessageWriter<Hit>,
+    flipbook: Res<Flipbook>,
 ) {
     let Ok((hero, eq)) = hero.single() else { return };
     let w = eq.weapon;
@@ -120,27 +124,32 @@ fn auto_attack(
     match w.kind {
         AttackKind::Bolt | AttackKind::Arrow => {
             // Extra projectiles fan out evenly around the aim direction.
-            let (mesh, scale) = if w.kind == AttackKind::Bolt { (BOLT, 2.5) } else { (ARROW, 1.6) };
-            let scene = assets.load(GltfAssetLabel::Scene(0).from_asset(mesh));
+            let fire = w.kind == AttackKind::Bolt;
+            let arrow = assets.load(GltfAssetLabel::Scene(0).from_asset(ARROW));
             let n = stats.projectiles as f32;
             for i in 0..stats.projectiles {
                 let dir = Vec2::from_angle((i as f32 - (n - 1.0) / 2.0) * BOLT_SPREAD).rotate(aim);
                 let (damage, crit) = roll_damage(w.damage, &stats);
-                commands.spawn((
-                    Projectile {
-                        vel: dir * w.speed_or_radius,
-                        damage,
-                        crit,
-                        hit_sound: w.hit_sound,
-                        pierce: w.pierce + stats.pierce,
-                        life: w.range / w.speed_or_radius,
-                        hit: vec![],
-                    },
-                    RunEntity,
-                    Pos(hero.0 + dir * 0.6),
-                    WorldAssetRoot(scene.clone()),
-                    Transform::from_scale(Vec3::splat(scale)),
-                ));
+                let projectile = Projectile {
+                    vel: dir * w.speed_or_radius,
+                    damage,
+                    crit,
+                    hit_sound: w.hit_sound,
+                    explodes: fire,
+                    pierce: w.pierce + stats.pierce,
+                    life: w.range / w.speed_or_radius,
+                    hit: vec![],
+                };
+                let mut entity = commands.spawn((projectile, RunEntity, Pos(hero.0 + dir * 0.6)));
+                if fire {
+                    // Fireball: TQ2 flame flipbook sprite with a small light of its own.
+                    entity.insert((Transform::default(), Visibility::default())).with_children(|p| {
+                        p.spawn(flipbook.fireball(1.7));
+                        p.spawn(PointLight { color: Color::srgb(1.0, 0.5, 0.15), intensity: 2.0e5, range: 6.0, ..default() });
+                    });
+                } else {
+                    entity.insert((WorldAssetRoot(arrow.clone()), Transform::from_scale(Vec3::splat(1.6))));
+                }
             }
         }
         AttackKind::Sweep => {
@@ -176,6 +185,7 @@ fn fire_nova(
     grid: Res<EnemyGrid>,
     ground: Res<Ground>,
     audio: Res<Audio>,
+    flipbook: Res<Flipbook>,
     mut hits: MessageWriter<Hit>,
     hero: Query<&Pos, With<Hero>>,
     mut enemies: Query<&mut Health, With<Enemy>>,
@@ -209,6 +219,12 @@ fn fire_nova(
         PointLight { color: Color::srgb(1.0, 0.55, 0.15), intensity: 4.0e6, range: radius * 3.0, ..default() },
         Transform::from_xyz(hero.0.x, ground.stand(hero.0) + 1.5, hero.0.y),
     ));
+    // A ring of TQ2 fire explosions marks the Nova's reach.
+    for k in 0..10 {
+        let p = hero.0 + Vec2::from_angle(k as f32 * std::f32::consts::TAU / 10.0) * radius * 0.85;
+        let at = Vec3::new(p.x, ground.stand(p) + 0.8, p.y);
+        commands.spawn((flipbook.explosion(at, 2.2), RunEntity));
+    }
     commands.spawn((
         NovaRing { age: 0.0, radius },
         RunEntity,
@@ -228,6 +244,7 @@ fn move_projectiles(
     mut enemies: Query<&mut Health, With<Enemy>>,
     mut hit_events: MessageWriter<Hit>,
     audio: Res<Audio>,
+    flipbook: Res<Flipbook>,
 ) {
     let dt = time.delta_secs();
     for (e, mut pos, mut p) in &mut projectiles {
@@ -241,7 +258,11 @@ fn move_projectiles(
                 if let Ok(mut hp) = enemies.get_mut(target) {
                     hp.hp -= p.damage;
                     hit_events.write(Hit { at: pos.0, amount: p.damage, crit: p.crit });
-                    audio.play(p.hit_sound, Some(Vec3::new(pos.0.x, ground.stand(pos.0) + 1.0, pos.0.y)), 0.5, 0.07);
+                    let at = Vec3::new(pos.0.x, ground.stand(pos.0) + 1.0, pos.0.y);
+                    audio.play(p.hit_sound, Some(at), 0.5, 0.07);
+                    if p.explodes {
+                        commands.spawn((flipbook.explosion(at, 1.8), RunEntity));
+                    }
                     p.hit.push(target);
                     if p.hit.len() as u32 > p.pierce {
                         done = true;
@@ -274,6 +295,7 @@ fn kill_dead(
         commands.entity(e).remove::<(Enemy, Health, Pos)>().insert(Dying(0.0));
         // Elites and bosses leave a chest with gear to choose from.
         if enemy.elite || enemy.boss {
+            info!("chest dropped at {:.0} s", run.time);
             drop_chest(&mut commands, &assets, pos.0);
         }
         let shards = if enemy.boss { 10 } else { 1 };

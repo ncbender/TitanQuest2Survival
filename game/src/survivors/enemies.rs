@@ -59,6 +59,7 @@ pub struct EnemySet;
 struct Director {
     spawn_timer: f32,
     bosses_spawned: usize,
+    first_elite: bool,
 }
 
 pub fn plugin(app: &mut App) {
@@ -121,8 +122,12 @@ fn spawn_waves(
     for i in 0..per_wave.min(cap.saturating_sub(alive)) {
         let def = bestiary::pick(t);
         let Some(p) = ring_point(&ground, &obstacles, hero.0, def.radius) else { continue };
-        // Every 15th spawn after the first minute is an elite.
-        let elite = t > 60.0 && (run.kills as usize + alive + i) % 15 == 0;
+        // A guaranteed first elite (and so a chest) at 30 s, then every 15th spawn after a minute.
+        let elite = (t > 30.0 && !director.first_elite) || (t > 60.0 && (run.kills as usize + alive + i) % 15 == 0);
+        if elite && !director.first_elite {
+            info!("first elite: {} at {t:.0} s", def.name);
+        }
+        director.first_elite |= elite;
         spawn_enemy(&mut commands, def, p, scale, elite);
         if def.spawn.is_some() {
             audio.play(super::content::sound::SKELETON_RISE, Some(Vec3::new(p.x, ground.stand(p), p.y)), 0.7, 0.3);

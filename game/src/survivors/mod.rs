@@ -22,7 +22,6 @@ use crate::ground::Ground;
 pub mod content {
     // Hero parts, weapons and armour sets live in equipment.rs.
 
-    pub const BOLT: &str = "props/TQ2/Content/TQ2/Character/Abilities/Forge_Sentry_01/sm_forge_sentry_projectile_01.glb";
     pub const ARROW: &str = "props/TQ2/Content/TQ2/Character/Human/Weapon/Bow2H/Projectile/sm_projectile_greek_narrow_01.glb";
     pub const SHARD: &str = "props/TQ2/Content/TQ2/Character/Crafting/In_World/Mystical_Shards/sm_mystic_shards.glb";
     /// Forge Call ability ring (TQ2) used as the Nova shockwave; outer radius in metres.
@@ -152,6 +151,7 @@ fn start_run(
     mut run: ResMut<Run>,
     mut stats: ResMut<player::HeroStats>,
     arena: Res<Arena>,
+    starting: Res<equipment::StartingWeapon>,
     entities: Query<Entity, With<RunEntity>>,
 ) {
     if requests.read().count() == 0 {
@@ -164,14 +164,15 @@ fn start_run(
     *stats = player::HeroStats::default();
     enemies::reset(&mut commands);
     combat::reset(&mut commands);
-    let hero = player::spawn_hero(&mut commands, arena.start);
+    let start_gear = equipment::Equipment { weapon: starting.0, ..default() };
+    let hero = player::spawn_hero(&mut commands, arena.start, start_gear);
     // Test hook: TQ2_TEST_CHEST=1 drops a chest right next to the hero.
     if std::env::var_os("TQ2_TEST_CHEST").is_some() {
         equipment::drop_chest(&mut commands, &assets, arena.start + Vec2::X);
     }
     // Test hook: TQ2_TEST_GEAR=bow,ranger starts with that weapon/armour.
     if let Ok(list) = std::env::var("TQ2_TEST_GEAR") {
-        let mut gear = equipment::Equipment::default();
+        let mut gear = start_gear;
         for name in list.split(',').map(str::trim) {
             match name {
                 "staff" => gear.weapon = &equipment::STAFF,

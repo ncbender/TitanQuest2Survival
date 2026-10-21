@@ -7,7 +7,7 @@ static class Manifest
 {
     record Character(string[] parts, string skeleton, string[] anims, string[]? clips);
     record File(Dictionary<string, Character> characters, Dictionary<string, string[]> props, Dictionary<string, string> scenes,
-                Dictionary<string, string>? fonts);
+                Dictionary<string, string>? fonts, Dictionary<string, string[]>? textures);
 
     public static async Task Run(DefaultFileProvider provider, string root, string cache, string[] only)
     {
@@ -42,6 +42,13 @@ static class Manifest
             var length = BitConverter.ToInt32(raw, 0);
             System.IO.File.WriteAllBytes(Path.Combine(dir, name + ".ttf"), raw.AsSpan(4, Math.Min(length, raw.Length - 4)).ToArray());
             Console.WriteLine($"font {name} <- {path}");
+        }
+        // Loose textures (e.g. TQ2 VFX flipbooks) -> cache/export/<name>/textures/<texture>.png
+        foreach (var (name, names) in (manifest.textures ?? []).Where(t => Wanted(t.Key)))
+        {
+            var library = new MaterialLibrary(provider, Path.Combine(cache, "export", name));
+            foreach (var texture in names)
+                Console.WriteLine($"texture {texture} -> {library.ExportByName(texture) ?? "NOT FOUND"}");
         }
         foreach (var (name, map) in manifest.scenes.Where(s => Wanted(s.Key)))
         {

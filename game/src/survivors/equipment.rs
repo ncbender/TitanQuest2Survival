@@ -40,7 +40,7 @@ pub struct WeaponDef {
 }
 
 pub const STAFF: WeaponDef = WeaponDef {
-    name: "Stab des Apollon",
+    name: "Staff of Apollo",
     mesh: "weapons/TQ2/Content/TQ2/Character/Human/Weapon/Staff2H/Unique/Staff2H_Staff_Of_Apollo_01/sm_staff2h_staff_of_apollo_01.glb",
     bone: "HandAttach_R",
     flip: true,
@@ -57,7 +57,7 @@ pub const STAFF: WeaponDef = WeaponDef {
 };
 
 pub const BOW: WeaponDef = WeaponDef {
-    name: "Bogen der Iris",
+    name: "Arch of Iris",
     mesh: "weapons/TQ2/Content/TQ2/Character/Human/Weapon/Bow2H/Unique/Bow2H_Arch_Of_Iris_Narrow_01/sk_bow2h_arch_of_iris_narrow_01.glb",
     bone: "HandAttach_L",
     flip: false,
@@ -74,7 +74,7 @@ pub const BOW: WeaponDef = WeaponDef {
 };
 
 pub const SWORD: WeaponDef = WeaponDef {
-    name: "Klinge des Kampfmagiers",
+    name: "Battlemage Sword",
     mesh: "weapons/TQ2/Content/TQ2/Character/Human/Weapon/Sword1H/Unique/Sword1H_Battlemage_Sword_01/sm_sword1h_battlemage_sword_01.glb",
     bone: "HandAttach_R",
     flip: true,
@@ -100,19 +100,19 @@ pub struct ArmorDef {
 }
 
 pub const ADVENTURER: ArmorDef = ArmorDef {
-    name: "Abenteurerkleidung",
+    name: "Adventurer's Garb",
     parts: &["hero/sk_male_torso_greek_adventurer_01_animated.glb", "hero/sk_male_leg_greek_adventurer_01_animated.glb"],
     armor: 0.0,
 };
 
 pub const SCHOLAR: ArmorDef = ArmorDef {
-    name: "Gewand des Gelehrten",
+    name: "Scholar's Robes",
     parts: &["hero/sk_male_torso_greek_scholar_02_01_animated.glb", "hero/sk_male_leg_greek_scholar_02_01_animated.glb"],
     armor: 0.12,
 };
 
 pub const RANGER: ArmorDef = ArmorDef {
-    name: "Rüstung des Waldläufers",
+    name: "Ranger's Armour",
     parts: &[
         "hero/sk_male_torso_greek_ranger_02_animated.glb",
         "hero/sk_male_leg_greek_ranger_02_animated.glb",
@@ -159,20 +159,33 @@ pub enum Gear {
     Armor(&'static ArmorDef),
 }
 
+impl WeaponDef {
+    /// What the weapon's auto-attack does, for menus.
+    pub fn attack_text(&self) -> &'static str {
+        match self.kind {
+            AttackKind::Bolt => "fireballs that explode on impact",
+            AttackKind::Arrow => "fast arrows that pierce",
+            AttackKind::Sweep => "melee sweep in an arc",
+        }
+    }
+}
+
 impl Gear {
     pub fn title(self) -> String {
         match self {
-            Gear::Weapon(w) => format!(
-                "Waffe: {} – {}",
-                w.name,
-                match w.kind {
-                    AttackKind::Bolt => "Feuergeschosse",
-                    AttackKind::Arrow => "durchschlagende Pfeile",
-                    AttackKind::Sweep => "Nahkampf-Hieb im Bogen",
-                }
-            ),
-            Gear::Armor(a) => format!("Rüstung: {} – {:.0} % weniger Schaden", a.name, a.armor * 100.0),
+            Gear::Weapon(w) => format!("Weapon: {} – {}", w.name, w.attack_text()),
+            Gear::Armor(a) => format!("Armour: {} – {:.0} % less damage taken", a.name, a.armor * 100.0),
         }
+    }
+}
+
+/// The weapon picked in character creation; every run starts with it.
+#[derive(Resource)]
+pub struct StartingWeapon(pub &'static WeaponDef);
+
+impl Default for StartingWeapon {
+    fn default() -> Self {
+        Self(&STAFF)
     }
 }
 
@@ -186,6 +199,7 @@ pub struct LootOffer(pub Vec<Gear>);
 
 pub fn plugin(app: &mut App) {
     app.init_resource::<LootOffer>()
+        .init_resource::<StartingWeapon>()
         .add_systems(Update, (apply_equipment, place_chests))
         .add_systems(FixedUpdate, open_chests.run_if(in_state(GameState::Playing)));
 }

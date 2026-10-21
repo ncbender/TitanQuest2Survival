@@ -117,6 +117,14 @@ parameter wins; slot by exact name/substring, then texture suffix (`_a`, `_n`, `
 In Bevy: vertex colours stripped (UE uses them as masks), normal maps flipped Y (DirectX),
 ORM matches Bevy's channel packing, samplers repeat.
 
+## VFX flipbooks
+
+TQ2's Niagara effects are not converted; the game uses their flipbook textures directly.
+The `textures` section of `tools/assets.json` exports loose textures by name (e.g. `vfx` →
+`cache/export/vfx/textures/`). `t_explosion_01_05x05_c` is a 5×5 sheet: frames 0–11 are fire,
+the rest smoke. `game/src/vfx.rs` shows cells as camera-facing unlit quads (`uv_transform`
+selects the cell).
+
 ## Building all game assets
 
 `tools/assets.json` lists every character (parts, skeleton, animation folders, optional clip

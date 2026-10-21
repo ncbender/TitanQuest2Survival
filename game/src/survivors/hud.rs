@@ -87,7 +87,7 @@ fn update_hud(
 Boss: {} {:.0} %", e.def.name, hp.hp / hp.max * 100.0))
             .unwrap_or_default();
         text.0 = format!(
-            "Stufe {}   {:02}:{:02} / 10:00   Besiegt: {}   Gegner: {}{boss}",
+            "Level {}   {:02}:{:02} / 10:00   Kills: {}   Enemies: {}{boss}",
             run.level,
             t / 60,
             t % 60,
@@ -179,7 +179,7 @@ fn panel(marker: impl Component) -> impl Bundle {
 
 fn show_level_up(mut commands: Commands, offer: Res<Offer>, stats: Res<HeroStats>, run: Res<Run>, title: Res<TitleFont>) {
     commands.spawn(panel(LevelUpPanel)).with_children(|p| {
-        p.spawn((Text::new(format!("Stufe {} erreicht – wähle (1–3)", run.level)), title.at(36.0)));
+        p.spawn((Text::new(format!("Level {} reached – choose (1–3)", run.level)), title.at(36.0)));
         for (i, upgrade) in offer.0.iter().enumerate() {
             p.spawn((
                 Node { width: Val::Px(560.0), padding: UiRect::all(Val::Px(14.0)), ..default() },
@@ -216,7 +216,7 @@ fn choose_upgrade(
 
 fn show_loot(mut commands: Commands, offer: Res<LootOffer>, title: Res<TitleFont>) {
     commands.spawn(panel(LootPanel)).with_children(|p| {
-        p.spawn((Text::new("Truhe geöffnet – wähle deine Ausrüstung"), title.at(36.0)));
+        p.spawn((Text::new("Chest opened – choose your gear"), title.at(36.0)));
         for (i, gear) in offer.0.iter().enumerate() {
             p.spawn((
                 Node { width: Val::Px(620.0), padding: UiRect::all(Val::Px(14.0)), ..default() },
@@ -225,7 +225,7 @@ fn show_loot(mut commands: Commands, offer: Res<LootOffer>, title: Res<TitleFont
             ))
             .observe(move |_: On<PointerClick>, mut clicked: ResMut<ClickedChoice>| clicked.0 = Some(i));
         }
-        p.spawn((Text::new("Esc – nichts nehmen"), TextFont { font_size: FontSize::Px(18.0), ..default() }));
+        p.spawn((Text::new("Esc – take nothing"), TextFont { font_size: FontSize::Px(18.0), ..default() }));
     });
 }
 
@@ -256,11 +256,11 @@ fn choose_loot(
 }
 
 fn show_end(mut commands: Commands, run: Res<Run>, title_font: Res<TitleFont>) {
-    let title = if run.won { "Überlebt! Die Titanen sind beeindruckt." } else { "Gefallen." };
+    let title = if run.won { "You survived! The Titans are impressed." } else { "You have fallen." };
     commands.spawn(panel(EndPanel)).with_children(|p| {
         p.spawn((Text::new(title), title_font.at(44.0)));
         p.spawn((
-            Text::new(format!("Stufe {}   Besiegt: {}   Zeit {:02}:{:02}\n\nR – Neustart     M – Hauptmenü", run.level, run.kills, run.time as u32 / 60, run.time as u32 % 60)),
+            Text::new(format!("Level {}   Kills: {}   Time {:02}:{:02}\n\nR – restart     M – main menu", run.level, run.kills, run.time as u32 / 60, run.time as u32 % 60)),
             TextFont { font_size: FontSize::Px(24.0), ..default() },
         ));
     });

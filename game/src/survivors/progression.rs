@@ -45,17 +45,17 @@ impl Upgrade {
 
     pub fn title(self, stats: &HeroStats) -> String {
         match self {
-            Upgrade::Damage => "Kraft des Titanen: +20 % Schaden".into(),
-            Upgrade::AttackSpeed => "Schnelle Hand: +15 % Angriffstempo".into(),
-            Upgrade::Multishot => "Schmiedefeuer: +1 Geschoss".into(),
-            Upgrade::Pierce => "Durchschlag: Geschosse treffen +1 Gegner".into(),
-            Upgrade::MoveSpeed => "Flinke Füße: +10 % Laufgeschwindigkeit".into(),
-            Upgrade::Area => "Weite Wirkung: +20 % Flächengröße".into(),
-            Upgrade::Crit => "Kritisches Auge: +8 % Krit-Chance".into(),
-            Upgrade::Vitality => "Vitalität: +20 max. Leben, volle Heilung".into(),
-            Upgrade::Magnet => "Anziehung: +50 % Sammelradius".into(),
-            Upgrade::Nova if stats.nova_level == 0 => "Neue Fähigkeit – Nova: Schockwelle um dich herum".into(),
-            Upgrade::Nova => format!("Nova Stufe {}: mehr Schaden, Radius, Tempo", stats.nova_level + 1),
+            Upgrade::Damage => "Might of the Titans: +20 % damage".into(),
+            Upgrade::AttackSpeed => "Quick Hands: +15 % attack speed".into(),
+            Upgrade::Multishot => "Forge Fire: +1 projectile".into(),
+            Upgrade::Pierce => "Piercing: projectiles hit +1 enemy".into(),
+            Upgrade::MoveSpeed => "Swift Feet: +10 % movement speed".into(),
+            Upgrade::Area => "Wide Reach: +20 % area size".into(),
+            Upgrade::Crit => "Keen Eye: +8 % critical chance".into(),
+            Upgrade::Vitality => "Vitality: +20 max health, full heal".into(),
+            Upgrade::Magnet => "Attraction: +50 % pickup radius".into(),
+            Upgrade::Nova if stats.nova_level == 0 => "New skill – Fire Nova: a ring of flames around you".into(),
+            Upgrade::Nova => format!("Fire Nova level {}: more damage, radius and speed", stats.nova_level + 1),
         }
     }
 

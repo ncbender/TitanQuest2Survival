@@ -22,7 +22,7 @@ pub struct EnemyDef {
 }
 
 pub const SPIDER: EnemyDef = EnemyDef {
-    name: "Spinne",
+    name: "Spider",
     parts: &["spider/sk_spider_01_animated.glb"],
     run: "a_spider_01_walk_01",
     run_speed: 1.8,
@@ -39,7 +39,7 @@ pub const SPIDER: EnemyDef = EnemyDef {
 };
 
 pub const BOARMAN: EnemyDef = EnemyDef {
-    name: "Ebermensch",
+    name: "Boarman",
     parts: &[
         "boarman/sk_boarman_brute_01_animated.glb",
         "boarman/sk_boarman_brute_mane_01_animated.glb",
@@ -60,7 +60,7 @@ pub const BOARMAN: EnemyDef = EnemyDef {
 };
 
 pub const GIANT_BOAR: EnemyDef = EnemyDef {
-    name: "Riesenkeiler",
+    name: "Giant Boar",
     parts: &[
         "giant_boar/sk_giant_boar_01_animated.glb",
         "giant_boar/sk_giant_boar_01_tusk_01_animated.glb",
@@ -81,7 +81,7 @@ pub const GIANT_BOAR: EnemyDef = EnemyDef {
 };
 
 pub const SKELETON: EnemyDef = EnemyDef {
-    name: "Skelett",
+    name: "Skeleton",
     parts: &["skeleton/sk_skeleton_01_body_01_animated.glb", "skeleton/sk_skeleton_01_head_01_animated.glb"],
     run: "a_skeleton_01_unarmed_run_01",
     run_speed: 1.0,
@@ -98,7 +98,7 @@ pub const SKELETON: EnemyDef = EnemyDef {
 };
 
 pub const HARPY: EnemyDef = EnemyDef {
-    name: "Harpyie",
+    name: "Harpy",
     parts: &["harpy/sk_harpy_01_animated.glb"],
     run: "a_harpy_01_run_flapping_01",
     run_speed: 1.0,
@@ -116,7 +116,7 @@ pub const HARPY: EnemyDef = EnemyDef {
 
 /// Boss. TQ2 ships no attack clips for Cyclops_01, so it swings with its combat idle.
 pub const CYCLOPS: EnemyDef = EnemyDef {
-    name: "Zyklop",
+    name: "Cyclops",
     parts: &[
         "cyclops/sk_cyclops_01_animated.glb",
         "cyclops/sk_cyclops_01_hair_01_animated.glb",

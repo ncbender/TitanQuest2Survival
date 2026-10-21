@@ -44,11 +44,11 @@ the extra skeletons of mane/arm-hair parts were the main cost.
 1. Performance beyond 500: animation LOD / reduced update rate for distant enemies.
 2. ~~More enemy types~~ Spider, Giant Boar, Skeleton (rises from the ground), Harpy, Cyclops boss
    added via `tools/assets.json` + `bestiary.rs`; still no real death animation.
-3. Weapon on the hero (staff), cast animation, TQ2 VFX instead of the temporary Nova torus.
+3. ~~Weapon on the hero~~ done; cast animation still open; TQ2 flipbook VFX for fireballs/Nova done.
 4. ~~Terrain layer blending~~ done (11 original ground layers); larger land arena (Greece world
    partition, FastGeo) still open.
 5. Satyr assembly (static-mesh parts on the humanoid rig).
-6. Main menu, settings/save, then two-player co-op.
+6. ~~Main menu~~ + character creation done; settings/save, then two-player co-op.
 
 ## Gear (first version, 2026-10-21)
 
@@ -58,6 +58,19 @@ the extra skeletons of mane/arm-hair parts were the main cost.
   damage. Elites and bosses drop a TQ2 chest; walking into it offers three pieces of gear.
 - Verified: screenshots of bow+ranger and sword+scholar; chest -> sword swap in a test run.
 - Not yet: attack animations while firing/swinging, more weapon/armour sets, item rarity/stats.
+
+## Character creation, fireballs, English UI (2026-10-21)
+
+- Main menu → "New Hero" → character creation: pick the starting weapon (1–3 or click);
+  every run (including restarts) starts with it (`StartingWeapon` in `equipment.rs`).
+- Staff fires fireballs: TQ2 flipbook `t_explosion_01_05x05_c` (frames 0–4 looping) with an
+  orange point light; explodes on impact (frames 0–11, the fiery part before the smoke).
+  `vfx.rs` holds the camera-facing flipbook sprites. Fire Nova spawns a ring of 10 explosions.
+- First elite is guaranteed after 30 s (verified: elite at 31 s, chest dropped at 40 s in an
+  autoplay run), then every 15th spawn after a minute as before.
+- All in-game text is English (menu, pause, HUD, level-up, upgrades, gear, loot, end screen,
+  enemy names).
+- Test hook `TQ2_MENU=hero` opens the character creation page (for screenshots).
 
 ## Planned features (requested by the user)
 
